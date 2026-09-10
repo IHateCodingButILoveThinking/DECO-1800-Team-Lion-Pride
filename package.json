@@ -1,11 +1,20 @@
 {
-  "name": "family-finds-wireframe",
+  "name": "family-finds",
   "private": true,
   "version": "1.0.0",
-  "description": "Plain HTML, CSS and JavaScript Family Finds wireframe",
+  "description": "Brisbane activities and family community clubs",
   "scripts": {
-    "dev": "python3 -m http.server 4173",
+    "dev": "npm run build && wrangler dev --local --var LOCAL_DEV:true",
     "build": "node build.js",
-    "check": "node --check script.js && node --check events-api.js && node --check data.js && node --check build.js"
+    "check": "node --check script.js && node --check community.js && node --check events-api.js && node --check icons.js && node --check server/worker.js && node --check build.js",
+    "db:generate": "drizzle-kit generate",
+    "db:local": "wrangler d1 migrations apply family-finds-local --local"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10",
+    "wrangler": "^4.130.0"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2"
   }
 }

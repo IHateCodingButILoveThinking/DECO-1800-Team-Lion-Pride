@@ -1,46 +1,62 @@
-# Family Finds — Team Lion Pride
+# Family Finds
 
-Week 7 clickable wireframe using **HTML, CSS and vanilla JavaScript**. No framework, runtime packages, API keys or backend are required.
+Family Finds helps Brisbane families discover affordable activities and connect through local clubs. The project uses plain HTML, CSS and JavaScript, with a Cloudflare Worker and D1 database for shared community data.
 
-## Preview
+## What the website includes
 
-Open `index.html` in a browser, or run `python3 -m http.server 4173` and visit `http://localhost:4173`. The Community page is `http://localhost:4173/#community`. A local server is recommended for consistent browser storage and API behaviour.
+- Live family-suitable activities from the [Brisbane City Council Events dataset](https://data.brisbane.qld.gov.au/explore/dataset/brisbane-city-council-events/).
+- Search by activity, category and suburb, with free, weekend and family-suitability filters.
+- Account-based saved activities that stay available across devices.
+- Local clubs organised by suburb, interests and family age groups.
+- Club membership, member profiles, privacy settings, discussions, replies and helpful reactions.
+- Optional Facebook or Messenger links set by each club owner. Clubs work fully inside Family Finds without Facebook.
+- “I’m interested” event registration. Signed-in members can see when people from one of their clubs are interested in the same council activity.
 
-## Files
+## Technology
 
-- `index.html`: shared navigation, page container and accessible dialog.
-- `styles.css`: responsive grayscale wireframe, including mobile layouts.
-- `script.js`: Home, Events, Saved and Community views; search, filters, event details and demo discussions.
-- `events-api.js`: live council pagination, text normalization and activity classification.
-- `data.js`: explicitly fictional community posts and meetup examples.
-- `build.js`: copies the five website files into `dist/` for static hosting.
+The front end is written in HTML, CSS and vanilla JavaScript. `server/worker.js` is a plain JavaScript Cloudflare Worker API. Cloudflare D1 stores profiles, clubs, memberships, posts, replies, reactions, saved activities and event interest. Drizzle generates versioned database migrations from `db/schema.js`.
 
-The HTML in each view is kept in named functions in `script.js`; `communityPage()` and `renderPosts()` are the main Community editing points. The navigation uses URL hashes so all pages work on a static host without server routing.
+Production uses the authenticated user headers supplied by the hosting platform. Local development supplies a test identity only on `localhost` or `127.0.0.1`; the production Worker never trusts a browser-provided identity header.
 
-## What works
+## Run locally
 
-- Live Home/Events listings, search, category and suburb filters, free activities and this-weekend shortcuts.
-- A family suitability filter based on council age labels, enabled by default. Uncheck it to browse all loaded council activities.
-- Event details with cost, age suitability, booking information and a link to the original council listing.
-- Saved events stored on this device through localStorage; nothing is sent to a server.
-- Community topic filtering, search, sorting, helpful reactions, reply dialogs and a demo post form. Posts and replies remain in memory and reset on refresh.
+```bash
+npm install
+npm run db:local
+npm run dev
+```
 
-## Council data and limits
+Open `http://127.0.0.1:4173`. Local data is stored by Wrangler under `.wrangler/` and is excluded from Git.
 
-Source: [Brisbane City Council Events](https://data.brisbane.qld.gov.au/explore/dataset/brisbane-city-council-events/).
+Useful commands:
 
-Public endpoint: `https://data.brisbane.qld.gov.au/api/explore/v2.1/catalog/datasets/brisbane-city-council-events/records`.
+```bash
+npm run check
+npm run build
+npm run db:generate
+```
 
-The application fetches future-starting listings in chronological pages of 100, progressively rendering results. The council describes this dataset as an extract of its next 2,000 published events; it does not cover every Brisbane event or every future date. Past-starting multi-day events are currently excluded. Source attribution appears in the footer. API failures show a retry state, and partially loaded results are labelled; sample events never replace failed live results.
+## Project structure
 
-Dates use Australia/Brisbane. Suburbs fall back to the final component of the council venue address when the suburb field is empty. Categories and family suitability are derived from council text, so users must confirm suitability and bookings on the original listing. Markets are council event listings, not a secondhand marketplace API. There are no grocery or discount integrations.
+- `index.html` — shared navigation and page shell.
+- `styles.css` — responsive visual system and layouts.
+- `script.js` — live council activities, filters, saved activities and event interactions.
+- `community.js` — clubs, profiles, registration, settings, posts and replies.
+- `events-api.js` — council feed pagination and normalization.
+- `icons.js` — inline interface icons.
+- `logo.png` — original Family Finds family-and-location logo.
+- `server/worker.js` — authenticated API and static asset delivery.
+- `db/schema.js` and `drizzle/` — D1 schema and migrations.
+- `build.js` — packages browser assets into the Worker build.
 
-## Prototype scope
+## Data and privacy behaviour
 
-The supplied home-page screenshot guides the grayscale navigation, quick-browse boxes and crossed image placeholders. The Canva short link was inaccessible during implementation. Community is an exploratory wireframe with invented example posts, not a researched or populated social network. No accounts, public posting, private messaging, moderation backend or marketplace transactions are implemented.
+The council feed is a rolling extract of published events and does not represent every event in Brisbane. The website keeps source attribution in its footer and links every activity back to the original council listing for final booking and suitability checks.
 
-The optional `search_family_activities` WebMCP tool reuses the visible event search when a browser supports it. No supported WebMCP browser context was available for end-to-end verification; ordinary browser use does not depend on it.
+Event-interest suggestions only include people who share at least one club with the signed-in member. The response includes adult member display names and the shared club name. It does not expose emails, children’s names, private age-group settings or people outside the member’s clubs. Club discussions and member lists require club membership.
 
-## Checks and publishing
+Mutating API requests require same-origin submission and authenticated identity. User text is inserted into the interface as escaped text, links require HTTPS, and optional Facebook links are restricted to Facebook or Messenger hosts.
 
-`npm run check` checks JavaScript syntax. `npm run build` copies static assets without installing dependencies. `.openai/hosting.json` identifies the private Sites preview and its `dist/` output. The original team GitHub remote is retained.
+## Hosting
+
+`.openai/hosting.json` declares the D1 binding used by the private Cloudflare-backed Sites deployment. Database migrations are applied during version publishing. The implementation is designed around Cloudflare’s free-tier Worker and D1 services and has no paid API dependency.

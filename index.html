@@ -3,26 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Family Finds wireframe: affordable Brisbane activities and a community for local families.">
+  <meta name="description" content="Find affordable Brisbane activities, join local family clubs, and make everyday life a little more connected.">
   <title>Family Finds · Brisbane families</title>
   <link rel="stylesheet" href="styles.css">
-  <script src="data.js" defer></script>
+  <link rel="icon" type="image/png" href="logo.png">
   <script src="events-api.js" defer></script>
+  <script src="icons.js" defer></script>
+  <script src="community.js" defer></script>
   <script src="script.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
-  <div class="prototype-bar"><span>FAMILY FINDS / WEEK 7 PROTOTYPE</span><span>Live events · Demo community</span></div>
   <header class="site-header">
     <div class="header-inner">
-      <a class="brand" href="#home"><span class="brand-mark" aria-hidden="true">ff.</span>Family Finds</a>
+      <a class="brand" href="#home"><img src="logo.png" alt="" width="39" height="39">Family Finds</a>
       <nav aria-label="Main navigation">
         <a href="#home" data-nav="home">Home</a>
         <a href="#events" data-nav="events">Events</a>
         <a href="#saved" data-nav="saved">Saved <span id="saved-count">0</span></a>
         <a href="#community" data-nav="community">Community</a>
       </nav>
-      <span class="header-location"><span aria-hidden="true">⌖</span> Brisbane, QLD</span>
+      <div class="header-account" id="header-account"><a href="#login">Log in</a><a class="button primary header-register" href="#register">Join Family Finds</a></div>
     </div>
   </header>
   <main id="main" tabindex="-1"></main>

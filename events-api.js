@@ -20,6 +20,7 @@ const CouncilEvents = (() => {
     const url = /^https:\/\//i.test(rawLink) ? rawLink : '';
     return {
       id: `bcc-${rawLink || row.subject}-${row.start_datetime}`,
+      image: /^https:\/\//i.test(String(row.eventimage || '')) ? String(row.eventimage) : '',
       title: plain(row.subject) || 'Council activity', category, suburb,
       venue: plain(row.venue || row.location) || 'Venue to be confirmed',
       day, date: start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: zone }),
