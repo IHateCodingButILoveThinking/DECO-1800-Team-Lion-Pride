@@ -1,0 +1,11 @@
+{
+  "name": "family-finds-wireframe",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Plain HTML, CSS and JavaScript Family Finds wireframe",
+  "scripts": {
+    "dev": "python3 -m http.server 4173",
+    "build": "node build.js",
+    "check": "node --check script.js && node --check events-api.js && node --check data.js && node --check build.js"
+  }
+}
