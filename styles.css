@@ -7,3 +7,8 @@
 @media(max-width:1050px){.community-layout .inspiration-grid{grid-template-columns:1fr}.inspiration-grid .club-card{flex-direction:row}.inspiration-grid .club-cover{height:auto;min-width:100px}.inspiration-grid .club-body p{margin-bottom:7px}.community-layout .club-grid{grid-template-columns:1fr}.profile-layout .club-grid{grid-template-columns:1fr}}
 @media(max-width:760px){.community-layout .club-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.community-layout .inspiration-grid{grid-template-columns:1fr}.hero-shell .home-intro h1{font-size:2.65rem}}
 @media(max-width:470px){.community-layout .club-grid{grid-template-columns:1fr}}
+#active-filter .button{border-color:#1d1d1f}
+.filter-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 20px}
+.filter-row p{margin:0}
+.family-toggle[aria-pressed="true"]{border-color:#1d1d1f;color:#1d1d1f}
+.family-toggle[aria-pressed="false"]{border-style:dotted}

@@ -8,7 +8,7 @@ let events = [];
 let feedState = 'loading';
 let feedTotal = 0;
 let saved = [];
-let familyOnly = true;
+let familyOnly = false;
 let eventFilters = { search: '', category: 'All activities', suburb: 'All suburbs', quick: '' };
 let toastTimer;
 
@@ -69,8 +69,7 @@ function activitiesPage() {
     ${home ? `<div class="section-heading"><h2>Quick browse</h2><span class="subtle">A good place to start</span></div><div class="quick-grid">
       ${[['free', '', 'Free activities', 'Fun without the spend'], ['weekend', '', 'This weekend', 'Make a little plan'], ['markets', '', 'Markets & secondhand', 'Find a little treasure'], ['near', '', 'Near me', 'Browse by suburb']].map(([id, icon, title, subtitle]) => `<button class="quick-card" data-quick="${id}"><span class="quick-icon" aria-hidden="true">${quickIcon(id)}</span><span><strong>${title}</strong><small>${subtitle}</small></span></button>`).join('')}</div>` : ''}
     <div class="section-heading"><h2>${savedPage ? 'Saved activities' : home ? 'Explore activities' : 'Find your next activity'}</h2>${home ? '<a class="text-link" href="#events">View all events ↗</a>' : ''}</div>
-    ${!savedPage ? `<div class="search-row"><label class="search-field"><span aria-hidden="true">${icon('search',18)}</span><input type="search" id="event-search" aria-label="Search activities" placeholder="Search activities, places or interests" value="${escapeHTML(eventFilters.search)}"></label><select id="event-category" aria-label="Activity category">${options(['All activities', 'Outdoors', 'Libraries', 'Creative', 'Markets & secondhand', 'Other activities'], eventFilters.category)}</select><select id="event-suburb" aria-label="Suburb">${options(['All suburbs', ...new Set(events.map(event => event.suburb))].sort((a,b)=>a === 'All suburbs' ? -1 : b === 'All suburbs' ? 1 : a.localeCompare(b)),eventFilters.suburb)}</select></div><div id="active-filter"></div>` : ''}
-    ${!savedPage ? `<label class="family-filter"><input type="checkbox" id="family-only" ${familyOnly ? 'checked' : ''}> Activities listed for children, teens or all ages</label>` : ''}
+    ${!savedPage ? `<div class="search-row"><label class="search-field"><span aria-hidden="true">${icon('search',18)}</span><input type="search" id="event-search" aria-label="Search activities" placeholder="Search activities, places or interests" value="${escapeHTML(eventFilters.search)}"></label><select id="event-category" aria-label="Activity category">${options(['All activities', 'Outdoors', 'Libraries', 'Creative', 'Markets & secondhand', 'Other activities'], eventFilters.category)}</select><select id="event-suburb" aria-label="Suburb">${options(['All suburbs', ...new Set(events.map(event => event.suburb))].sort((a,b)=>a === 'All suburbs' ? -1 : b === 'All suburbs' ? 1 : a.localeCompare(b)),eventFilters.suburb)}</select></div><div class="filter-row"><div id="active-filter"></div><button class="button small family-toggle" type="button" data-family-toggle aria-pressed="${familyOnly}">Children, teens or all ages</button></div>` : ''}
     <div id="feed-status" class="result-meta" role="status"></div><div class="event-grid" id="event-results"></div><div id="load-more" class="section-heading"></div>
     ${home ? `<section class="community-callout"><div><div class="eyebrow">BETTER TOGETHER</div><h2>A local find is better when it’s shared.</h2><p>Swap ideas, ask a question or meet other Brisbane families.</p></div><a class="button" href="#community">Explore the community <span aria-hidden="true">↗</span></a></section>` : ''}`;
 }
@@ -123,6 +122,7 @@ document.addEventListener('click', event => {
   if (button.hasAttribute('data-event-interest')) Social.toggleEventInterest(button.dataset.eventInterest);
   if (button.hasAttribute('data-more')) { visibleLimit += 12; renderEventResults(); }
   if (button.hasAttribute('data-reset')) { eventFilters = { search: '', category: 'All activities', suburb: 'All suburbs', quick: '' }; visibleLimit = 12; render(); }
+  if (button.hasAttribute('data-family-toggle')) { familyOnly = !familyOnly; button.setAttribute('aria-pressed', String(familyOnly)); visibleLimit = 12; renderEventResults(); }
   if (button.hasAttribute('data-retry')) loadEvents();
   if (button.hasAttribute('data-quick')) {
     const quick = button.dataset.quick;
@@ -135,7 +135,6 @@ document.addEventListener('input', event => {
   if (event.target.id === 'event-search') { eventFilters.search = event.target.value; visibleLimit = 12; renderEventResults(); }
 });
 document.addEventListener('change', event => {
-  if (event.target.id === 'family-only') { familyOnly = event.target.checked; visibleLimit = 12; renderEventResults(); }
   if (event.target.id === 'event-category') { eventFilters.category = event.target.value; visibleLimit = 12; renderEventResults(); }
   if (event.target.id === 'event-suburb') { eventFilters.suburb = event.target.value; visibleLimit = 12; renderEventResults(); }
 });
