@@ -1,0 +1,19 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "family-finds-api",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-13",
+  "vars": {
+    "ALLOWED_ORIGINS": "https://deco1800teams-lion-pride.uqcloud.net,http://127.0.0.1:3000,http://localhost:3000",
+    "ALLOW_VERCEL_PREVIEWS": "false"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "family-finds-db",
+      "database_id": "613de92c-16c3-43a3-b5d5-42084d62c8c2",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "dev": {"port": 8787, "ip": "127.0.0.1"}
+}

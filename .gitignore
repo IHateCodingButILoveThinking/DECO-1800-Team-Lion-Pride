@@ -3,3 +3,6 @@ node_modules/
 .DS_Store
 *.log
 .wrangler/
+.dev.vars
+backend/.dev.vars
+.vercel/

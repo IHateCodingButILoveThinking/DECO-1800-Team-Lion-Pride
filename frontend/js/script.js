@@ -44,7 +44,11 @@ function refreshSaveButtons() {
   });
 }
 function navigate(next) {
-  if (location.hash === `#${next}`) render();
+  if (next === 'home') {
+    history.pushState({}, '', location.pathname);
+    render();
+    window.scrollTo(0,0);
+  } else if (location.hash === `#${next}`) render();
   else location.hash = next;
 }
 function render() {
@@ -141,6 +145,7 @@ document.addEventListener('change', event => {
 });
 modal.addEventListener('click', event => { if (event.target === modal) { const bounds = modal.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) modal.close(); } });
 window.addEventListener('hashchange', () => { if (modal.open) modal.close(); visibleLimit = 12; render(); main.focus(); window.scrollTo(0,0); });
+window.addEventListener('popstate', () => { if (!location.hash) { visibleLimit = 12; render(); main.focus(); window.scrollTo(0,0); } });
 let loading = false;
 async function loadEvents() {
   if (loading) return;

@@ -1,62 +1,102 @@
 # Family Finds
 
-Family Finds helps Brisbane families discover affordable activities and connect through local clubs. The project uses plain HTML, CSS and JavaScript, with a Cloudflare Worker and D1 database for shared community data.
+Family Finds is a real community website for Brisbane families. It combines live Brisbane City Council activities with suburb and interest based clubs, internal discussions, optional Facebook links, saved events, member profiles and privacy settings.
 
-## What the website includes
+The project uses only free services:
 
-- Live family-suitable activities from the [Brisbane City Council Events dataset](https://data.brisbane.qld.gov.au/explore/dataset/brisbane-city-council-events/).
-- Search by activity, category and suburb, with free, weekend and family-suitability filters.
-- Account-based saved activities that stay available across devices.
-- Local clubs organised by suburb, interests and family age groups.
-- Club membership, member profiles, privacy settings, discussions, replies and helpful reactions.
-- Optional Facebook or Messenger links set by each club owner. Clubs work fully inside Family Finds without Facebook.
-- “I’m interested” event registration. Signed-in members can see when people from one of their clubs are interested in the same council activity.
+- The UQ Team Zone hosts the static HTML, CSS, JavaScript and image files.
+- A Cloudflare Worker provides the API on the Workers Free plan.
+- Cloudflare D1 stores accounts and community data on the D1 Free plan.
+- Built-in email and password accounts provide login and registration.
+- Brisbane City Council Open Data supplies current event listings.
 
-## Technology
+If a Cloudflare daily free limit is reached, requests fail until the limit resets; the project is not configured to upgrade or create usage charges automatically.
 
-The front end is written in HTML, CSS and vanilla JavaScript. `server/worker.js` is a plain JavaScript Cloudflare Worker API. Cloudflare D1 stores profiles, clubs, memberships, posts, replies, reactions, saved activities and event interest. Drizzle generates versioned database migrations from `db/schema.js`.
+## Project structure
 
-Production uses the authenticated user headers supplied by the hosting platform. Local development supplies a test identity only on `localhost` or `127.0.0.1`; the production Worker never trusts a browser-provided identity header.
+```text
+.
+├── frontend/
+│   ├── index.html          # Website homepage and page shell
+│   ├── assets/logo.png     # Family Finds logo
+│   ├── css/styles.css      # Responsive Apple-style visual system
+│   └── js/
+│       ├── config.js       # Cloudflare API address
+│       ├── events-api.js   # Brisbane City Council data client
+│       ├── icons.js        # Interface icons
+│       ├── community.js    # Login, clubs, posts, profiles and settings
+│       └── script.js       # Navigation, events, saving and event interest
+├── backend/
+│   ├── src/worker.js       # Cloudflare API and account authentication
+│   ├── migrations/         # Versioned D1 database schema
+│   └── wrangler.config.jsonc
+└── package.json
+```
+
+`frontend/index.html` is copied to `/var/www/htdocs/index.html`, so the public homepage remains:
+
+```text
+https://deco1800teams-lion-pride.uqcloud.net/index.html
+```
+
+## Current Cloudflare resources
+
+- Worker: `family-finds-api`
+- API: `https://family-finds-api.zeyi-yang.workers.dev`
+- D1 database: `family-finds-db`
+
+The API accepts browser requests from the UQ Team Zone origin. Session tokens are stored only in the user's browser and D1 stores only a SHA-256 hash of each token. Passwords are salted and derived with PBKDF2-SHA-256 before storage; plain passwords are never saved.
 
 ## Run locally
+
+Install the one development dependency and create the local database:
 
 ```bash
 npm install
 npm run db:local
-npm run dev
 ```
 
-Open `http://127.0.0.1:4173`. Local data is stored by Wrangler under `.wrangler/` and is excluded from Git.
+Start the backend and frontend in separate terminals:
 
-Useful commands:
+```bash
+npm run dev:backend
+npm run dev:frontend
+```
+
+Open `http://127.0.0.1:3000/index.html`. Create a local test account through the normal registration page.
+
+Run the source checks with:
 
 ```bash
 npm run check
-npm run build
-npm run db:generate
 ```
 
-## Project structure
+## Deploy the frontend to UQ
 
-- `index.html` — shared navigation and page shell.
-- `styles.css` — responsive visual system and layouts.
-- `script.js` — live council activities, filters, saved activities and event interactions.
-- `community.js` — clubs, profiles, registration, settings, posts and replies.
-- `events-api.js` — council feed pagination and normalization.
-- `icons.js` — inline interface icons.
-- `logo.png` — original Family Finds family-and-location logo.
-- `server/worker.js` — authenticated API and static asset delivery.
-- `db/schema.js` and `drizzle/` — D1 schema and migrations.
-- `build.js` — packages browser assets into the Worker build.
+The instructions supplied with this project say the Team Zone must be accessed from the UQ network, Eduroam or UQ VPN. On the Team Zone:
+
+```bash
+ssh YOUR_UQ_USERNAME@deco1800teams-lion-pride.zones.eait.uq.edu.au
+cd ~/DECO-1800-Team-Lion-Pride
+git pull
+cp -R frontend/. /var/www/htdocs/
+```
+
+Copy the contents of `frontend/`, rather than the whole repository. The deployed directory should contain `index.html`, `assets/`, `css/` and `js/`. Backend source, migrations and secret examples must stay outside `/var/www/htdocs/`.
+
+## Deploy backend changes
+
+Apply new migrations before deploying code that depends on them:
+
+```bash
+npm run db:remote
+npm run deploy:backend
+```
 
 ## Data and privacy behaviour
 
-The council feed is a rolling extract of published events and does not represent every event in Brisbane. The website keeps source attribution in its footer and links every activity back to the original council listing for final booking and suitability checks.
+The website saves accounts, profiles, clubs, memberships, posts, replies, reactions, saved activities and event interest in D1. Password derivation happens inside the Worker and login responses use revocable session tokens.
 
-Event-interest suggestions only include people who share at least one club with the signed-in member. The response includes adult member display names and the shared club name. It does not expose emails, children’s names, private age-group settings or people outside the member’s clubs. Club discussions and member lists require club membership.
+Event cards show interested adults only when they share at least one club with the signed-in member. The API does not expose emails, children's names, private age settings or people outside the member's clubs. Club discussions and member lists require membership. User-entered text is escaped in the interface, links require HTTPS, and optional Facebook links are restricted to Facebook or Messenger hosts.
 
-Mutating API requests require same-origin submission and authenticated identity. User text is inserted into the interface as escaped text, links require HTTPS, and optional Facebook links are restricted to Facebook or Messenger hosts.
-
-## Hosting
-
-`.openai/hosting.json` declares the D1 binding used by the private Cloudflare-backed Sites deployment. Database migrations are applied during version publishing. The implementation is designed around Cloudflare’s free-tier Worker and D1 services and has no paid API dependency.
+The council feed is a rolling extract of published events. Each activity links back to its official listing so families can check availability, suitability and booking requirements.

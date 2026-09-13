@@ -4,17 +4,15 @@
   "version": "1.0.0",
   "description": "Brisbane activities and family community clubs",
   "scripts": {
-    "dev": "npm run build && wrangler dev --local --var LOCAL_DEV:true",
-    "build": "node build.js",
-    "check": "node --check script.js && node --check community.js && node --check events-api.js && node --check icons.js && node --check server/worker.js && node --check build.js",
-    "db:generate": "drizzle-kit generate",
-    "db:local": "wrangler d1 migrations apply family-finds-local --local"
+    "dev:frontend": "python3 -m http.server 3000 --directory frontend",
+    "dev:backend": "wrangler dev --config backend/wrangler.config.jsonc --local --var LOCAL_DEV:true",
+    "build": "npm run check",
+    "check": "node --check frontend/js/config.js && node --check frontend/js/events-api.js && node --check frontend/js/icons.js && node --check frontend/js/community.js && node --check frontend/js/script.js && node --check backend/src/worker.js",
+    "db:local": "wrangler d1 migrations apply family-finds-db --local --config backend/wrangler.config.jsonc",
+    "db:remote": "wrangler d1 migrations apply family-finds-db --remote --config backend/wrangler.config.jsonc",
+    "deploy:backend": "wrangler deploy --config backend/wrangler.config.jsonc"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.31.10",
     "wrangler": "^4.130.0"
-  },
-  "dependencies": {
-    "drizzle-orm": "^0.45.2"
   }
 }
