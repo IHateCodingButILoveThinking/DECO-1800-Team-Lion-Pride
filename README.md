@@ -39,6 +39,8 @@ If a Cloudflare daily free limit is reached, requests fail until the limit reset
 https://deco1800teams-lion-pride.uqcloud.net/index.html
 ```
 
+Home links use `index.html` with no `#home` suffix. Inner views use hashes so Events, Saved and Community continue to work on the static UQ server without rewrite rules.
+
 ## Current Cloudflare resources
 
 - Worker: `family-finds-api`
