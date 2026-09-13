@@ -41,6 +41,84 @@ https://deco1800teams-lion-pride.uqcloud.net/index.html
 
 Home links use `index.html` with no `#home` suffix. Inner views use hashes so Events, Saved and Community continue to work on the static UQ server without rewrite rules.
 
+## Current features
+
+- Responsive, mobile-first navigation with icons for Home, Events, Saved and Community.
+- Live Brisbane City Council activities with search, category, suburb, free, weekend and family filters.
+- Email and password registration, login, logout, profiles and privacy settings.
+- Account-based saved activities and event interest.
+- Clubs based on suburb, interests and family age groups.
+- Club membership, discussions, replies, helpful reactions and sharing.
+- Optional Facebook or Messenger links for individual clubs.
+- Event cards that can show when members of the same club are interested.
+
+## Team task allocation
+
+The project has four contributors: the Community owner and three teammates. Each area has one main owner so the team can work in parallel with fewer merge conflicts.
+
+### Community owner
+
+Own the Community and club experience:
+
+- Improve the Community landing page and mobile layout.
+- Recommend clubs using suburb and interests.
+- Design clear club cards with member count, interests and recent activity.
+- Maintain create, edit, join, leave and share club flows.
+- Maintain club discussions, replies and helpful reactions.
+- Connect events to clubs and show shared-club interest.
+- Support optional Facebook or Messenger links.
+- Add clear community rules, reporting controls and family privacy guidance.
+
+### Teammate 1 — event filters
+
+Own event discovery and filtering:
+
+- Search by event name, venue, suburb and interest.
+- Maintain category, suburb and family-suitable filters.
+- Maintain quick filters for Free, This weekend, Markets and Near me.
+- Add removable active-filter chips and a Clear all action.
+- Improve the mobile filter panel and touch controls.
+- Maintain result counts, loading states, errors and empty results.
+- Make sure filters remain selected after viewing an event.
+
+Primary files: `frontend/js/script.js` and the related filter styles in `frontend/css/styles.css`.
+
+### Teammate 2 — profile and account UI
+
+Own accounts, profiles and saved content:
+
+- Improve the login and registration screens.
+- Improve profile and settings layouts on mobile and desktop.
+- Maintain the avatar, display name, suburb, bio and interest fields.
+- Maintain privacy controls for suburb, interests and family age groups.
+- Show joined clubs, saved activities and interested events on the profile.
+- Improve validation, success messages and first-use empty states.
+
+Primary files: the account and profile sections of `frontend/js/community.js` and their styles in `frontend/css/styles.css`.
+
+### Teammate 3 — event data, backend and release
+
+Own data quality and integration:
+
+- Normalise Brisbane City Council dates, costs, venues, suburbs and images.
+- Remove duplicate and expired activities.
+- Maintain the event detail view and official council links.
+- Maintain Cloudflare Worker routes, D1 migrations, CORS and authentication.
+- Test frontend and backend flows together.
+- Test current Chrome, Safari, mobile and desktop layouts.
+- Prepare the final GitHub and UQ Team Zone release.
+
+Primary files: `frontend/js/events-api.js`, `backend/src/worker.js`, `backend/migrations/` and deployment documentation.
+
+### Shared workflow
+
+1. Create a small branch for each feature.
+2. Agree before editing a shared section of `styles.css` or `community.js`.
+3. Pull current changes before starting and before merging.
+4. Run `npm run check` before requesting a review.
+5. Test the changed flow at a mobile width and a desktop width.
+6. Have one other teammate review the result before it is merged.
+
 ## Current Cloudflare resources
 
 - Worker: `family-finds-api`
