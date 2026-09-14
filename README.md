@@ -1,5 +1,4 @@
 # Family Finds
-thehe
 
 ## Project background
 
