@@ -281,3 +281,20 @@ The website saves accounts, profiles, clubs, memberships, posts, replies, reacti
 Event cards show interested adults only when they share at least one club with the signed-in member. The API does not expose emails, children's names, private age settings or people outside the member's clubs. Club discussions and member lists require membership. User-entered text is escaped in the interface, links require HTTPS, and optional Facebook links are restricted to Facebook or Messenger hosts.
 
 The council feed is a rolling extract of published events. Each activity links back to its official listing so families can check availability, suitability and booking requirements.
+
+## Google sign-in
+
+The login and registration screens include Google's official **Continue with Google** button. A first sign-in creates a profile without a password, then opens Settings so the member can add their suburb and interests. Returning users go to Community. Email/password registration still works. A verified Gmail or Google Workspace identity connects to an existing password profile with the same email, preserving its profile and password login. Other custom-domain email matches require password login because Google may no longer be authoritative for those addresses.
+
+The browser sends the Google credential to `POST /api/auth/google`. The Worker uses `jose` and Google's rotating public keys to verify the signature, issuer, audience, expiration and verified email before creating a normal Family Finds session. Google subjects identify accounts; email changes do not create duplicate Google profiles. No client secret is needed or stored.
+
+Configuration:
+
+- The public OAuth client ID is configured in `frontend/js/config.js` and `GOOGLE_CLIENT_ID` in `backend/wrangler.config.jsonc`; keep these values identical.
+- Google Auth Platform → Clients → Authorised JavaScript origins must include `https://deco1800teams-lion-pride.uqcloud.net` (without `/frontend/`).
+- For local Google sign-in, also register `http://localhost` and `http://localhost:3000` (or the actual preview port). Use that registered hostname when opening the preview.
+- Redirect URIs may stay empty for this popup/callback flow.
+- While the Google project is in Testing, configure intended test accounts under Audience. Change the publishing status when ready for public use.
+- Deploy the updated Worker with `npm run deploy:backend` and upload the updated frontend to UQ using the deployment steps above. Existing databases need migrations through `0003`; this feature adds no new migration.
+
+Run `npm test` with Node 22.13+ to check signed-token validation, account creation, repeat login, email collision handling, password login, origin checks and logout against an in-memory SQLite database. Tests use generated test keys and never real Google credentials. A real Google popup sign-in still needs a user to complete it on a registered origin.

@@ -1,4 +1,5 @@
 /* Family Finds API: Cloudflare Worker + D1. */
+import {verifyGoogleCredential} from './google-auth.js';
 const SESSION_TTL = 60 * 60 * 24 * 30;
 // Cloudflare Workers supports PBKDF2 iteration counts up to 100,000.
 const PASSWORD_ITERATIONS = 100000;
@@ -136,6 +137,49 @@ async function logout(request, env) {
   return json({signedOut: true});
 }
 
+async function googleAccount(request, env) {
+  if (!env.GOOGLE_CLIENT_ID) fail(503, 'Google sign-in is not configured yet. Please use email and password.');
+  if (!request.headers.get('Content-Type')?.startsWith('application/json')) fail(415, 'Send a JSON request.');
+  const body = await bodyOf(request);
+  const credential = text(body.credential, 'Google credential', 16000);
+  let identity;
+  try { identity = await verifyGoogleCredential(credential, env.GOOGLE_CLIENT_ID); }
+  catch { fail(401, 'Google sign-in could not be verified. Please try again.'); }
+  const authId = `google:${identity.sub}`;
+  let user = await first(env.DB, 'SELECT * FROM profiles WHERE auth_id=?', authId);
+  let created = false;
+  if (!user) {
+    const email = emailAddress(identity.email);
+    const existing = await first(env.DB, 'SELECT * FROM profiles WHERE lower(email)=?', email);
+    // Google is authoritative for Gmail and verified Workspace identities, so
+    // those identities can safely connect to the matching password profile.
+    if (existing) {
+      const googleOwnsEmail = email.endsWith('@gmail.com') || (identity.email_verified === true && typeof identity.hd === 'string' && identity.hd);
+      if (!googleOwnsEmail) fail(409, 'This email already has a password account. Please log in with your password.');
+      try { await run(env.DB, 'UPDATE profiles SET auth_id=? WHERE id=?', authId, existing.id); }
+      catch (error) {
+        if (String(error?.message || '').includes('UNIQUE')) fail(409, 'This Google account is already connected to another profile.');
+        throw error;
+      }
+      user = await first(env.DB, 'SELECT * FROM profiles WHERE id=?', existing.id);
+    }
+    if (!user) {
+      const id = crypto.randomUUID();
+      const name = (typeof identity.name === 'string' && identity.name.trim() ? identity.name.trim() : 'Neighbour').slice(0, 60);
+      try {
+        await run(env.DB, 'INSERT INTO profiles (id,auth_id,email,name,suburb,onboarding_complete,created_at) VALUES (?,?,?,?,?,?,?)', id, authId, email, name, '', 1, Date.now());
+        created = true;
+      } catch (error) {
+        if (!String(error?.message || '').includes('UNIQUE')) throw error;
+        // A concurrent sign-in for the same Google identity may have created it.
+        if (!await first(env.DB, 'SELECT id FROM profiles WHERE auth_id=?', authId)) fail(409, 'An account already uses this email. Please log in with your existing password.');
+      }
+      user = await first(env.DB, 'SELECT * FROM profiles WHERE auth_id=?', authId);
+    }
+  }
+  return json({token: await createSession(env.DB, user.id), expiresIn: SESSION_TTL, profile: parseProfile(user, true), created}, created ? 201 : 200);
+}
+
 async function member(db, clubId, userId) { return userId ? first(db, 'SELECT user_id FROM memberships WHERE club_id=? AND user_id=?', clubId, userId) : null; }
 async function clubById(db, id, userId) {
   const club = await first(db, 'SELECT c.*,p.name AS owner_name,(SELECT COUNT(*) FROM memberships m WHERE m.club_id=c.id) AS member_count FROM clubs c JOIN profiles p ON p.id=c.owner_id WHERE c.id=?', id);
@@ -161,6 +205,7 @@ async function handleRequest(request, env) {
   const path = url.pathname;
   const method = request.method;
   if (path === '/api/health' && method === 'GET') return json({ok: true, service: 'family-finds-api'});
+  if (path === '/api/auth/google' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return googleAccount(request, env); }
   if (path === '/api/auth/register' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return registerAccount(request, env); }
   if (path === '/api/auth/login' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return loginAccount(request, env); }
   if (path === '/api/auth/logout' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return logout(request, env); }

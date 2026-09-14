@@ -7,12 +7,16 @@
     "dev:frontend": "python3 -m http.server 3000 --directory frontend",
     "dev:backend": "wrangler dev --config backend/wrangler.config.jsonc --local --var LOCAL_DEV:true",
     "build": "npm run check",
-    "check": "node --check frontend/js/config.js && node --check frontend/js/events-api.js && node --check frontend/js/icons.js && node --check frontend/js/community.js && node --check frontend/js/script.js && node --check backend/src/worker.js",
+    "check": "node --check frontend/js/config.js && node --check frontend/js/events-api.js && node --check frontend/js/icons.js && node --check frontend/js/community.js && node --check frontend/js/script.js && node --check backend/src/worker.js && node --check backend/src/google-auth.js",
     "db:local": "wrangler d1 migrations apply family-finds-db --local --config backend/wrangler.config.jsonc",
     "db:remote": "wrangler d1 migrations apply family-finds-db --remote --config backend/wrangler.config.jsonc",
-    "deploy:backend": "wrangler deploy --config backend/wrangler.config.jsonc"
+    "deploy:backend": "wrangler deploy --config backend/wrangler.config.jsonc",
+    "test": "node --test backend/tests/*.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.130.0"
+  },
+  "dependencies": {
+    "jose": "^6.2.12"
   }
 }

@@ -4,6 +4,7 @@
   "main": "src/worker.js",
   "compatibility_date": "2026-09-13",
   "vars": {
+    "GOOGLE_CLIENT_ID": "270648649859-sa2p5jdcm7taenr2rdq653kvoq3f0mb2.apps.googleusercontent.com",
     "ALLOWED_ORIGINS": "https://deco1800teams-lion-pride.uqcloud.net,http://127.0.0.1:3000,http://localhost:3000",
     "ALLOW_VERCEL_PREVIEWS": "false"
   },
