@@ -14,6 +14,7 @@ let feedTotal = 0;
 let saved = [];
 let familyOnly = true;
 let eventFilters = emptyEventFilters();
+let userLocation = null;
 let toastTimer;
 
 // Keep every filter reset consistent across the Events page and home shortcuts.
@@ -23,7 +24,9 @@ function emptyEventFilters() {
     category: 'All activities',
     suburb: 'All suburbs',
     date: 'all',
-    quick: ''
+    quick: '',
+    maxPrice: 100,
+    near: false
   };
 }
 
@@ -106,6 +109,24 @@ function dateFilterLabel(value) {
     : date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
+function eventPrice(event) {
+  if (event.cost === 0) return 0;
+  const match = String(event.costLabel || '').match(/\$\s*(\d+(?:\.\d{1,2})?)/);
+  return match ? Number(match[1]) : null;
+}
+
+function eventDistance(event) {
+  if (!userLocation || !Number.isFinite(event.latitude) || !Number.isFinite(event.longitude)) return null;
+  const toRadians = degrees => degrees * Math.PI / 180;
+  const latitudeDelta = toRadians(event.latitude - userLocation.latitude);
+  const longitudeDelta = toRadians(event.longitude - userLocation.longitude);
+  const startLatitude = toRadians(userLocation.latitude);
+  const endLatitude = toRadians(event.latitude);
+  const value = Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(startLatitude) * Math.cos(endLatitude) * Math.sin(longitudeDelta / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+}
+
 // Render quick and detailed event filters.
 function eventFilterControls() {
   const categories = [
@@ -121,7 +142,7 @@ function eventFilterControls() {
     ['free', 'Free', eventFilters.quick === 'free'],
     ['weekend', 'This weekend', eventFilters.date === 'weekend'],
     ['markets', 'Markets', eventFilters.category === 'Markets & secondhand'],
-    ['near', 'Near me', eventFilters.suburb !== 'All suburbs']
+    ['near', 'Near me', eventFilters.near]
   ];
 
   return `
@@ -153,7 +174,27 @@ function eventFilterControls() {
         ${options(suburbOptions(), eventFilters.suburb)}
       </select>
     </div>
-    <label class="family-filter"><input type="checkbox" id="family-only" ${familyOnly ? 'checked' : ''}> Family-suitable activities only</label>
+    <div class="event-secondary-filters">
+      <details class="event-price-filter">
+        <summary class="${eventFilters.quick === 'free' || eventFilters.maxPrice < 100 ? 'active' : ''}">Price</summary>
+        <div class="event-price-panel">
+          <strong>Budget</strong>
+          <div class="event-price-options" role="radiogroup" aria-label="Price type">
+            <label><input type="radio" name="price-mode" value="any" ${eventFilters.quick !== 'free' ? 'checked' : ''}> Any price</label>
+            <label><input type="radio" name="price-mode" value="free" ${eventFilters.quick === 'free' ? 'checked' : ''}> Free only</label>
+          </div>
+          <label class="event-price-maximum" for="event-price-range">
+            Maximum price: <strong id="event-price-value">${eventFilters.maxPrice >= 100 ? '$100+' : `$${eventFilters.maxPrice}`}</strong>
+          </label>
+          <input type="range" id="event-price-range" min="0" max="100" step="5"
+            value="${eventFilters.maxPrice}" ${eventFilters.quick === 'free' ? 'disabled' : ''}>
+          <div class="event-price-scale"><span>$0</span><span>$100+</span></div>
+          <button type="button" class="button primary event-price-apply" data-price-apply
+            aria-label="Apply price filter">Apply</button>
+        </div>
+      </details>
+      <label class="family-filter"><input type="checkbox" id="family-only" ${familyOnly ? 'checked' : ''}> Family-suitable activities only</label>
+    </div>
     <div id="active-filter" role="group" aria-label="Active filters"></div>`;
 }
 
@@ -163,7 +204,7 @@ function activitiesPage() {
   const titles = { home: 'Little adventures.<br>Closer connections.', events: 'Find A Family Activity', saved: 'Saved for later.' };
   return `${home ? '<div class="hero-shell">' : ''}<section class="home-intro"><div class="eyebrow">${savedPage ? 'SAVED' : 'BRISBANE FAMILY ACTIVITIES'}</div><h1>${titles[route]}</h1><p class="intro">${savedPage ? 'Activities you want to try.' : 'Find free family activities, nearby markets and local clubs.'}</p>${home ? '<div class="hero-actions"><a class="button primary" href="#events">Find an activity</a><a class="button" href="#community">Find a club</a></div>' : ''}</section>${home ? '<div class="hero-picture" id="home-hero-image"><span class="image-fallback">' + icon('leaf',45) + '</span></div></div>' : ''}
     ${home ? `<div class="section-heading"><h2>Quick browse</h2><span class="subtle">A good place to start</span></div><div class="quick-grid">
-      ${[['free', '', 'Free activities', 'No-cost ideas'], ['weekend', '', 'This weekend', 'Saturday and Sunday'], ['markets', '', 'Markets & secondhand', 'Markets and swaps'], ['near', '', 'Near me', 'Choose your suburb']].map(([id, icon, title, subtitle]) => `<button class="quick-card" data-quick="${id}"><span class="quick-icon" aria-hidden="true">${quickIcon(id)}</span><span><strong>${title}</strong><small>${subtitle}</small></span></button>`).join('')}</div>` : ''}
+      ${[['free', '', 'Free activities', 'No-cost ideas'], ['weekend', '', 'This weekend', 'Saturday and Sunday'], ['markets', '', 'Markets & secondhand', 'Markets and swaps'], ['near', '', 'Near me', 'Use your location']].map(([id, icon, title, subtitle]) => `<button class="quick-card" data-quick="${id}"><span class="quick-icon" aria-hidden="true">${quickIcon(id)}</span><span><strong>${title}</strong><small>${subtitle}</small></span></button>`).join('')}</div>` : ''}
     <div class="section-heading"><h2>${savedPage ? 'Saved activities' : home ? 'Explore activities' : 'Find your next activity'}</h2>${home ? '<a class="text-link" href="#events">View all events ↗</a>' : ''}</div>
     ${!savedPage ? eventFilterControls() : ''}
     <div id="feed-status" class="result-meta" role="status"></div><div class="event-grid" id="event-results"></div><div id="load-more" class="section-heading"></div>
@@ -182,7 +223,7 @@ function filteredEvents() {
   const query = eventFilters.search.toLowerCase().trim();
   const selectedSuburb = eventFilters.suburb.toLowerCase();
 
-  return events.filter(event => {
+  const matches = events.filter(event => {
     const searchableText = [
       event.title,
       event.venue,
@@ -201,14 +242,24 @@ function filteredEvents() {
     const matchesCategory = eventFilters.category === 'All activities' ||
       event.category === eventFilters.category;
     const matchesFree = eventFilters.quick !== 'free' || event.cost === 0;
+    const price = eventPrice(event);
+    const matchesPrice = eventFilters.maxPrice >= 100 ||
+      (price !== null && price <= eventFilters.maxPrice);
+    const distance = eventDistance(event);
+    const matchesNear = !eventFilters.near || (distance !== null && distance <= 10);
 
     return (!familyOnly || event.family) &&
       searchableText.includes(query) &&
       matchesDate &&
       matchesSuburb &&
       matchesCategory &&
-      matchesFree;
+      matchesFree &&
+      matchesPrice &&
+      matchesNear;
   });
+  return eventFilters.near
+    ? matches.sort((first, second) => eventDistance(first) - eventDistance(second))
+    : matches;
 }
 
 // Active-filter chips show every applied condition and expose one remove button per condition.
@@ -222,6 +273,8 @@ function renderActiveFilters() {
   if (eventFilters.suburb !== 'All suburbs') filters.push(['suburb', `Suburb: ${eventFilters.suburb}`]);
   if (eventFilters.date !== 'all') filters.push(['date', `Date: ${dateFilterLabel(eventFilters.date)}`]);
   if (eventFilters.quick === 'free') filters.push(['quick', 'Free activities']);
+  if (eventFilters.maxPrice < 100) filters.push(['maxPrice', `Up to $${eventFilters.maxPrice}`]);
+  if (eventFilters.near) filters.push(['near', 'Within 10 km']);
   if (familyOnly) filters.push(['family', 'Family-suitable']);
 
   const chips = filters.map(([key, label]) => `
@@ -239,7 +292,9 @@ function renderActiveFilters() {
 }
 function eventCard(event) {
   const active = isSaved(event.id);
-  return `<article class="event-card"><div class="event-visual">${event.image ? `<img src="${escapeHTML(event.image)}" alt="${escapeHTML(event.title)}" loading="lazy" referrerpolicy="no-referrer">` : `<span class="image-fallback">${icon(event.category === 'Libraries' ? 'book' : event.category === 'Outdoors' ? 'leaf' : 'calendar',38)}</span>`}<span class="price-label">${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free' : `$${event.cost}`))}</span><button class="save-button" data-save="${escapeHTML(event.id)}" aria-label="${active ? 'Unsave' : 'Save'} ${escapeHTML(event.title)}" aria-pressed="${active}">${active ? '♥' : '♡'}</button></div><div class="event-content"><p class="event-category">${escapeHTML(event.category)}</p><h3>${escapeHTML(event.title)}</h3><div class="event-meta">${escapeHTML(event.date || event.day)} · ${escapeHTML(event.suburb)}<br>${escapeHTML(event.venue)}</div><div class="card-bottom"><span>${escapeHTML(event.ages)}</span><button data-event="${escapeHTML(event.id)}">View activity ↗</button></div>${Social.eventInterestCard(event.id)}</div></article>`;
+  const distance = eventDistance(event);
+  const distanceLabel = eventFilters.near && distance !== null ? ` · ${distance.toFixed(1)} km away` : '';
+  return `<article class="event-card"><div class="event-visual">${event.image ? `<img src="${escapeHTML(event.image)}" alt="${escapeHTML(event.title)}" loading="lazy" referrerpolicy="no-referrer">` : `<span class="image-fallback">${icon(event.category === 'Libraries' ? 'book' : event.category === 'Outdoors' ? 'leaf' : 'calendar',38)}</span>`}<span class="price-label">${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free' : `$${event.cost}`))}</span><button class="save-button" data-save="${escapeHTML(event.id)}" aria-label="${active ? 'Unsave' : 'Save'} ${escapeHTML(event.title)}" aria-pressed="${active}">${active ? '♥' : '♡'}</button></div><div class="event-content"><p class="event-category">${escapeHTML(event.category)}</p><h3>${escapeHTML(event.title)}</h3><div class="event-meta">${escapeHTML(event.date || event.day)} · ${escapeHTML(event.suburb)}${escapeHTML(distanceLabel)}<br>${escapeHTML(event.venue)}</div><div class="card-bottom"><span>${escapeHTML(event.ages)}</span><button data-event="${escapeHTML(event.id)}">View activity ↗</button></div>${Social.eventInterestCard(event.id)}</div></article>`;
 }
 function renderEventResults() {
   if (!document.querySelector('#event-results')) return;
@@ -272,10 +327,41 @@ function showEvent(id) {
   modal.dataset.eventId=id;
 }
 
+function showLocationConsent() {
+  showDialog(`<div class="eyebrow">NEAR ME</div><h2 id="modal-title">Use your current location?</h2><p>Family Finds will use your location to show activities within 10 km and sort them by distance. Your coordinates are not saved by this site.</p><div class="form-actions"><button type="button" class="button" data-close>Not now</button><button type="button" class="button primary" data-allow-location>Allow location</button></div>`);
+}
+
+function enableNearMe(button) {
+  if (!navigator.geolocation) {
+    modal.close();
+    notify('Location is not available in this browser.');
+    return;
+  }
+  button.disabled = true;
+  button.textContent = 'Locating…';
+  navigator.geolocation.getCurrentPosition(position => {
+    userLocation = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+    eventFilters.near = true;
+    eventFilters.suburb = 'All suburbs';
+    visibleLimit = 12;
+    modal.close();
+    render();
+    notify('Showing activities within 10 km, nearest first.');
+  }, error => {
+    modal.close();
+    notify(error.code === error.PERMISSION_DENIED
+      ? 'Location permission was not allowed.'
+      : 'Your location could not be found. Please try again.');
+  }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
+}
+
 // Removing a chip changes only its own filter and keeps the other selections.
 function removeEventFilter(filter) {
   if (filter === 'family') {
     familyOnly = false;
+  } else if (filter === 'near') {
+    eventFilters.near = false;
+    userLocation = null;
   } else if (Object.prototype.hasOwnProperty.call(eventFilters, filter)) {
     eventFilters[filter] = emptyEventFilters()[filter];
   } else {
@@ -289,6 +375,7 @@ function removeEventFilter(filter) {
 // "Clear all" also turns off the default family-suitable checkbox.
 function clearEventFilters() {
   eventFilters = emptyEventFilters();
+  userLocation = null;
   familyOnly = false;
   visibleLimit = 12;
   render();
@@ -303,24 +390,32 @@ function openQuickFilter(quick) {
 
   navigate('events');
   if (quick === 'near') {
-    setTimeout(() => document.querySelector('#event-suburb')?.focus(), 50);
-    notify('Choose your suburb to find nearby activities.');
+    setTimeout(showLocationConsent, 50);
   }
 }
 
 // Toggle quick filters without clearing other choices.
 function toggleEventQuickFilter(quick) {
-  if (quick === 'free') eventFilters.quick = eventFilters.quick === 'free' ? '' : 'free';
+  if (quick === 'free') {
+    eventFilters.quick = eventFilters.quick === 'free' ? '' : 'free';
+    if (eventFilters.quick === 'free') eventFilters.maxPrice = 100;
+  }
   else if (quick === 'weekend') eventFilters.date = eventFilters.date === 'weekend' ? 'all' : 'weekend';
   else if (quick === 'markets') eventFilters.category = eventFilters.category === 'Markets & secondhand' ? 'All activities' : 'Markets & secondhand';
-  else if (quick !== 'near') return;
+  else if (quick === 'near') {
+    if (eventFilters.near) {
+      eventFilters.near = false;
+      userLocation = null;
+      visibleLimit = 12;
+      render();
+    } else {
+      showLocationConsent();
+    }
+    return;
+  } else return;
 
   visibleLimit = 12;
   render();
-  if (quick === 'near') {
-    setTimeout(() => document.querySelector('#event-suburb')?.focus(), 50);
-    notify('Choose your suburb to find nearby activities.');
-  }
 }
 
 document.addEventListener('click', event => {
@@ -338,6 +433,19 @@ document.addEventListener('click', event => {
     return;
   }
   if (button.hasAttribute('data-retry')) loadEvents();
+  if (button.hasAttribute('data-allow-location')) {
+    enableNearMe(button);
+    return;
+  }
+  if (button.hasAttribute('data-price-apply')) {
+    const panel = button.closest('.event-price-panel');
+    const freeOnly = panel.querySelector('[name="price-mode"]:checked').value === 'free';
+    eventFilters.quick = freeOnly ? 'free' : '';
+    eventFilters.maxPrice = freeOnly ? 100 : Number(panel.querySelector('#event-price-range').value);
+    visibleLimit = 12;
+    render();
+    return;
+  }
   if (button.hasAttribute('data-event-quick')) {
     toggleEventQuickFilter(button.dataset.eventQuick);
     return;
@@ -347,10 +455,13 @@ document.addEventListener('click', event => {
 
 // Text search updates results immediately without rebuilding the focused input.
 document.addEventListener('input', event => {
-  if (event.target.id !== 'event-search') return;
-  eventFilters.search = event.target.value;
-  visibleLimit = 12;
-  renderEventResults();
+  if (event.target.id === 'event-search') {
+    eventFilters.search = event.target.value;
+    visibleLimit = 12;
+    renderEventResults();
+  } else if (event.target.id === 'event-price-range') {
+    document.querySelector('#event-price-value').textContent = event.target.value === '100' ? '$100+' : `$${event.target.value}`;
+  }
 });
 
 // Filter changes preserve all other active filters.
@@ -360,6 +471,11 @@ document.addEventListener('change', event => {
   else if (field.id === 'event-date') eventFilters.date = field.value || 'all';
   else if (field.id === 'event-category') eventFilters.category = field.value;
   else if (field.id === 'event-suburb') eventFilters.suburb = field.value;
+  else if (field.name === 'price-mode') {
+    const range = document.querySelector('#event-price-range');
+    range.disabled = field.value === 'free';
+    return;
+  }
   else return;
 
   visibleLimit = 12;
