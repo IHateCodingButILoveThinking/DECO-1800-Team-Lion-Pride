@@ -2,7 +2,9 @@
    Dates are interpreted in Brisbane; HTML from the feed is reduced to text. */
 const CouncilEvents = (() => {
   const endpoint = 'https://data.brisbane.qld.gov.au/api/explore/v2.1/catalog/datasets/brisbane-city-council-events/records';
+  const locationsEndpoint = 'https://data.brisbane.qld.gov.au/api/explore/v2.1/catalog/datasets/brisbane-city-council-events-locations/records';
   const zone = 'Australia/Brisbane';
+  let locationsByVenue = new Map();
   function plain(value) {
     const document = new DOMParser().parseFromString(String(value ?? ''), 'text/html');
     return document.body.textContent.replace(/\s+/g, ' ').trim();
@@ -18,11 +20,15 @@ const CouncilEvents = (() => {
     const day = start.toLocaleDateString('en-AU', { weekday: 'long', timeZone: zone });
     const rawLink = String(row.web_link || '');
     const url = /^https:\/\//i.test(rawLink) ? rawLink : '';
+    const venue = plain(row.venue || row.location) || 'Venue to be confirmed';
+    const coordinates = locationsByVenue.get(venue.toLowerCase());
     return {
       id: `bcc-${rawLink || row.subject}-${row.start_datetime}`,
       image: /^https:\/\//i.test(String(row.eventimage || '')) ? String(row.eventimage) : '',
       title: plain(row.subject) || 'Council activity', category, suburb,
-      venue: plain(row.venue || row.location) || 'Venue to be confirmed',
+      venue,
+      latitude: coordinates?.latitude ?? null,
+      longitude: coordinates?.longitude ?? null,
       day, date: start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: zone }),
       dateKey: start.toLocaleDateString('en-CA', { timeZone: zone }), start: start.toISOString(),
       time: plain(row.formatteddatetime) || start.toLocaleString('en-AU', { timeZone: zone }),
@@ -42,9 +48,29 @@ const CouncilEvents = (() => {
     if (!Array.isArray(data.results) || !Number.isFinite(data.total_count)) throw new Error('Unexpected council response');
     return data;
   }
+  async function loadLocations() {
+    const requestPage = async offset => {
+      const params = new URLSearchParams({ limit: '100', offset: String(offset) });
+      const response = await fetch(`${locationsEndpoint}?${params}`, { signal: AbortSignal.timeout(20000) });
+      if (!response.ok) throw new Error(`Locations feed returned ${response.status}`);
+      return response.json();
+    };
+    const first = await requestPage(0);
+    const offsets = [];
+    for (let offset = 100; offset < Math.min(first.total_count, 10000); offset += 100) offsets.push(offset);
+    const remaining = await Promise.all(offsets.map(requestPage));
+    const rows = first.results.concat(remaining.flatMap(result => result.results));
+    return new Map(rows
+      .filter(row => row.venue_name && Number.isFinite(row.latitude) && Number.isFinite(row.longitude))
+      .map(row => [plain(row.venue_name).toLowerCase(), { latitude: row.latitude, longitude: row.longitude }]));
+  }
   async function load(onProgress) {
     const now = new Date().toISOString();
-    const first = await page(0, now);
+    const [first, locations] = await Promise.all([
+      page(0, now),
+      loadLocations().catch(() => new Map())
+    ]);
+    locationsByVenue = locations;
     let rows = first.results;
     const total = first.total_count;
     onProgress(rows.map(normalize), total);
