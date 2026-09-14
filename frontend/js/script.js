@@ -98,7 +98,15 @@ const dateLabels = {
   next30: 'Next 30 days'
 };
 
-// Render the search, date, category and suburb controls in their display order.
+function dateFilterLabel(value) {
+  if (dateLabels[value]) return dateLabels[value];
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+// Render quick and detailed event filters.
 function eventFilterControls() {
   const categories = [
     'All activities',
@@ -108,11 +116,13 @@ function eventFilterControls() {
     'Markets & secondhand',
     'Other activities'
   ];
-  const dateOptions = Object.entries(dateLabels)
-    .map(([value, label]) =>
-      `<option value="${value}" ${value === eventFilters.date ? 'selected' : ''}>${label}</option>`
-    )
-    .join('');
+  const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(eventFilters.date) ? eventFilters.date : '';
+  const quickFilters = [
+    ['free', 'Free', eventFilters.quick === 'free'],
+    ['weekend', 'This weekend', eventFilters.date === 'weekend'],
+    ['markets', 'Markets', eventFilters.category === 'Markets & secondhand'],
+    ['near', 'Near me', eventFilters.suburb !== 'All suburbs']
+  ];
 
   return `
     <div class="search-row event-filter-row">
@@ -121,7 +131,21 @@ function eventFilterControls() {
         <input type="search" id="event-search" aria-label="Search activities"
           placeholder="Search activities or places" value="${escapeHTML(eventFilters.search)}">
       </label>
-      <select id="event-date" aria-label="Activity date">${dateOptions}</select>
+    </div>
+    ${route === 'events' ? `
+      <div class="event-filter-section">
+        <span class="event-filter-label">Quick filters</span>
+        <div class="event-quick-filters" role="group" aria-label="Quick filters">
+          ${quickFilters.map(([id, label, active]) => `
+            <button type="button" class="event-quick-filter${active ? ' active' : ''}"
+              data-event-quick="${id}" aria-pressed="${active}">${quickIcon(id)} ${label}</button>`).join('')}
+        </div>
+      </div>
+      <span class="event-filter-label">More filters</span>` : ''}
+    <div class="search-row event-filter-row event-more-filters">
+      <label class="event-date-picker">
+        <input type="date" id="event-date" aria-label="Activity date" value="${selectedDate}">
+      </label>
       <select id="event-category" aria-label="Activity category">
         ${options(categories, eventFilters.category)}
       </select>
@@ -129,6 +153,7 @@ function eventFilterControls() {
         ${options(suburbOptions(), eventFilters.suburb)}
       </select>
     </div>
+    <label class="family-filter"><input type="checkbox" id="family-only" ${familyOnly ? 'checked' : ''}> Family-suitable activities only</label>
     <div id="active-filter" role="group" aria-label="Active filters"></div>`;
 }
 
@@ -141,7 +166,6 @@ function activitiesPage() {
       ${[['free', '', 'Free activities', 'No-cost ideas'], ['weekend', '', 'This weekend', 'Saturday and Sunday'], ['markets', '', 'Markets & secondhand', 'Markets and swaps'], ['near', '', 'Near me', 'Choose your suburb']].map(([id, icon, title, subtitle]) => `<button class="quick-card" data-quick="${id}"><span class="quick-icon" aria-hidden="true">${quickIcon(id)}</span><span><strong>${title}</strong><small>${subtitle}</small></span></button>`).join('')}</div>` : ''}
     <div class="section-heading"><h2>${savedPage ? 'Saved activities' : home ? 'Explore activities' : 'Find your next activity'}</h2>${home ? '<a class="text-link" href="#events">View all events ↗</a>' : ''}</div>
     ${!savedPage ? eventFilterControls() : ''}
-    ${!savedPage ? `<label class="family-filter"><input type="checkbox" id="family-only" ${familyOnly ? 'checked' : ''}> Family-suitable activities only</label>` : ''}
     <div id="feed-status" class="result-meta" role="status"></div><div class="event-grid" id="event-results"></div><div id="load-more" class="section-heading"></div>
     ${home ? `<section class="community-callout"><div><div class="eyebrow">LOCAL CLUBS</div><h2>Share a local find.</h2><p>Plan an activity or meet nearby families.</p></div><a class="button" href="#community">Visit community <span aria-hidden="true">↗</span></a></section>` : ''}`;
 }
@@ -170,7 +194,8 @@ function filteredEvents() {
       (eventFilters.date === 'today' && event.dateKey === today) ||
       (eventFilters.date === 'weekend' && event.dateKey >= saturday && event.dateKey <= sunday) ||
       (eventFilters.date === 'next7' && event.dateKey >= today && event.dateKey <= addDays(6)) ||
-      (eventFilters.date === 'next30' && event.dateKey >= today && event.dateKey <= addDays(29));
+      (eventFilters.date === 'next30' && event.dateKey >= today && event.dateKey <= addDays(29)) ||
+      event.dateKey === eventFilters.date;
     const matchesSuburb = eventFilters.suburb === 'All suburbs' ||
       event.suburb.toLowerCase() === selectedSuburb;
     const matchesCategory = eventFilters.category === 'All activities' ||
@@ -195,7 +220,7 @@ function renderActiveFilters() {
   if (eventFilters.search.trim()) filters.push(['search', `Search: ${eventFilters.search.trim()}`]);
   if (eventFilters.category !== 'All activities') filters.push(['category', `Category: ${eventFilters.category}`]);
   if (eventFilters.suburb !== 'All suburbs') filters.push(['suburb', `Suburb: ${eventFilters.suburb}`]);
-  if (eventFilters.date !== 'all') filters.push(['date', `Date: ${dateLabels[eventFilters.date]}`]);
+  if (eventFilters.date !== 'all') filters.push(['date', `Date: ${dateFilterLabel(eventFilters.date)}`]);
   if (eventFilters.quick === 'free') filters.push(['quick', 'Free activities']);
   if (familyOnly) filters.push(['family', 'Family-suitable']);
 
@@ -283,6 +308,21 @@ function openQuickFilter(quick) {
   }
 }
 
+// Toggle quick filters without clearing other choices.
+function toggleEventQuickFilter(quick) {
+  if (quick === 'free') eventFilters.quick = eventFilters.quick === 'free' ? '' : 'free';
+  else if (quick === 'weekend') eventFilters.date = eventFilters.date === 'weekend' ? 'all' : 'weekend';
+  else if (quick === 'markets') eventFilters.category = eventFilters.category === 'Markets & secondhand' ? 'All activities' : 'Markets & secondhand';
+  else if (quick !== 'near') return;
+
+  visibleLimit = 12;
+  render();
+  if (quick === 'near') {
+    setTimeout(() => document.querySelector('#event-suburb')?.focus(), 50);
+    notify('Choose your suburb to find nearby activities.');
+  }
+}
+
 document.addEventListener('click', event => {
   const button = event.target.closest('button, [data-close]');
   if (!button) return;
@@ -298,6 +338,10 @@ document.addEventListener('click', event => {
     return;
   }
   if (button.hasAttribute('data-retry')) loadEvents();
+  if (button.hasAttribute('data-event-quick')) {
+    toggleEventQuickFilter(button.dataset.eventQuick);
+    return;
+  }
   if (button.hasAttribute('data-quick')) openQuickFilter(button.dataset.quick);
 });
 
@@ -309,11 +353,11 @@ document.addEventListener('input', event => {
   renderEventResults();
 });
 
-// Dropdown and checkbox changes preserve all other active filters.
+// Filter changes preserve all other active filters.
 document.addEventListener('change', event => {
   const field = event.target;
   if (field.id === 'family-only') familyOnly = field.checked;
-  else if (field.id === 'event-date') eventFilters.date = field.value;
+  else if (field.id === 'event-date') eventFilters.date = field.value || 'all';
   else if (field.id === 'event-category') eventFilters.category = field.value;
   else if (field.id === 'event-suburb') eventFilters.suburb = field.value;
   else return;

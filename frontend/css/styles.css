@@ -69,6 +69,55 @@ body.events-route .section-heading {
   background-repeat: no-repeat;
   background-position: right 16px center;
 }
+.event-date-picker {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.event-date-picker input {
+  width: 100%;
+}
+
+.event-filter-section {
+  margin: 14px 0 16px;
+}
+.event-filter-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #4f4f57;
+  font-size: .78rem;
+  font-weight: 700;
+}
+.event-quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.event-quick-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid #d3d5da;
+  border-radius: 999px;
+  background: #fff;
+  color: #34343a;
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 600;
+}
+.event-quick-filter:hover {
+  border-color: #9fc8f5;
+  background: #f5f9ff;
+}
+.event-quick-filter.active {
+  border-color: #7db8f5;
+  background: #eaf3ff;
+  color: #075db3;
+}
+.event-more-filters {
+  margin-bottom: 12px;
+}
 
 /* --- 4. Active-filter chips -----*/
 .active-filter-list {
@@ -164,7 +213,16 @@ body.events-route .event-card .interest-pill {
   body.events-route .card-bottom button { min-height: 44px; }
   .event-filter-row { gap: 12px; }
   .event-filter-row select { min-height: 48px; }
+  .event-date-picker input { min-height: 48px; }
+  .event-quick-filter { min-height: 44px; }
 }
 @media (max-width: 470px) {
   .event-filter-row select { flex-basis: 100%; }
+  .event-date-picker { flex-basis: 100%; }
+  .event-quick-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .event-quick-filter { flex: 0 0 auto; }
 }
