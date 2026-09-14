@@ -14,6 +14,12 @@
 .nav-icon{display:none}
 @media(max-width:760px){body{padding-bottom:72px}.site-header{backdrop-filter:none}.header-account>a:first-child{display:inline-flex;min-height:44px;align-items:center}.header-inner>nav{height:70px}.header-inner>nav a{flex-direction:column;gap:3px;min-height:60px;font-size:.72rem}.nav-icon{display:grid;height:23px;place-items:center}.header-inner>nav a[aria-current=page]:before{top:4px}.header-inner>nav a[aria-current=page] .nav-icon{color:var(--blue)}#saved-count{position:absolute;margin:0 0 21px 34px}.section-heading>.subtle{display:none}}
 
+/* Google Identity Services renders its own accessible, branded button. */
+.auth-divider{display:flex;align-items:center;gap:14px;margin:24px 0 18px;color:var(--muted,#64748b);font-size:14px}
+.auth-divider::before,.auth-divider::after{content:"";height:1px;flex:1;background:#e2e8f0}
+.google-signin{width:100%;min-height:44px;display:flex;justify-content:center}
+.auth-google-status{font-size:13px;line-height:1.5;text-align:center;color:var(--muted,#64748b);margin:12px 0 0}
+
 /* =====================
    Events page
    ===================== */
