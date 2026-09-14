@@ -2,6 +2,8 @@
 
 ## Project background
 
+## 1
+
 Family Finds is a real website designed to help Brisbane families and caregivers find affordable things to do and connect with people nearby. The target audience includes households managing limited budgets, parents looking for suitable activities, and families who want stronger local connections.
 
 The original project explored activities, grocery discounts, second-hand shopping and reuse. Grocery and marketplace data was difficult to access through reliable free APIs, so the project now has a clearer focus:
