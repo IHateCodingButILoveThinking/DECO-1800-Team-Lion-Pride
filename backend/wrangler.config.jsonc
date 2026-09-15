@@ -6,8 +6,11 @@
   "vars": {
     "GOOGLE_CLIENT_ID": "270648649859-sa2p5jdcm7taenr2rdq653kvoq3f0mb2.apps.googleusercontent.com",
     "ALLOWED_ORIGINS": "https://deco1800teams-lion-pride.uqcloud.net,http://127.0.0.1:3000,http://localhost:3000",
-    "ALLOW_VERCEL_PREVIEWS": "false"
+    "ALLOW_VERCEL_PREVIEWS": "false",
+    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "AI_DAILY_REQUEST_LIMIT": "30"
   },
+  "ai": {"binding": "AI"},
   "d1_databases": [
     {
       "binding": "DB",

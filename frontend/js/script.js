@@ -14,6 +14,11 @@ let feedTotal = 0;
 let saved = [];
 let familyOnly = true;
 let eventFilters = emptyEventFilters();
+const EVENT_CHAT_WELCOME = 'Tell me the age, suburb, date, budget and any needs.';
+let smartCriteria = null;
+let eventChatMessages = [{role: 'assistant', content: EVENT_CHAT_WELCOME}];
+let eventChatBusy = false;
+let eventChatOpen = false;
 let toastTimer;
 
 // Keep every filter reset consistent across the Events page and home shortcuts.
@@ -157,6 +162,36 @@ function eventFilterControls() {
     <div id="active-filter" role="group" aria-label="Active filters"></div>`;
 }
 
+function eventChatPanel() {
+  const examples = [
+    'We are a family of 4 with a 6-year-old and a dog. Find something free this weekend.',
+    'Show me creative activities for an 8-year-old near Indooroopilly.',
+    'We need a wheelchair-friendly activity in the next 7 days.'
+  ];
+  return `<div class="event-chat-shell">
+    <button type="button" class="event-chat-launcher${eventChatOpen ? ' open' : ''}" data-ai-toggle aria-expanded="${eventChatOpen}" aria-controls="event-chat-panel">
+      ${icon('message', 20)} <span>${eventChatOpen ? 'Close chat' : 'Ask AI'}</span>
+    </button>
+    ${eventChatOpen ? `<section class="event-chat" id="event-chat-panel" aria-labelledby="event-chat-title">
+    <div class="event-chat-heading">
+      <span class="event-chat-icon">${icon('message', 22)}</span>
+      <div><span class="eyebrow">AI EVENT FINDER</span><h2 id="event-chat-title">Ask AI</h2></div>
+      ${eventChatMessages.length > 1 ? '<button type="button" class="plain-button event-chat-reset" data-ai-reset>Start over</button>' : ''}
+      <button type="button" class="plain-button event-chat-close" data-ai-toggle aria-label="Close AI chat">×</button>
+    </div>
+    <div class="event-chat-log" id="event-chat-log" aria-live="polite" aria-busy="${eventChatBusy}">
+      ${eventChatMessages.map(message => `<div class="event-chat-message ${message.role}">${escapeHTML(message.content)}</div>`).join('')}
+      ${eventChatBusy ? '<div class="event-chat-message assistant typing"><span></span><span></span><span></span><span class="chat-thinking">Understanding your request…</span></div>' : ''}
+    </div>
+    ${eventChatMessages.length === 1 ? `<div class="event-chat-examples" aria-label="Example questions">${examples.map((example, index) => `<button type="button" data-ai-prompt="${escapeHTML(example)}">${index === 0 ? 'Family + dog' : index === 1 ? 'Age + suburb' : 'Accessibility'}</button>`).join('')}</div>` : ''}
+    <form class="event-chat-form" id="event-chat-form">
+      <textarea id="event-chat-input" name="message" maxlength="500" rows="2" required aria-label="Describe the activity your family needs" placeholder="e.g. Free this weekend for a 6-year-old with our dog" ${eventChatBusy ? 'disabled' : ''}></textarea>
+      <button class="button primary" type="submit" ${eventChatBusy ? 'disabled' : ''}>${eventChatBusy ? 'Thinking…' : `Ask ${icon('arrow', 16)}`}</button>
+    </form>
+    <p class="event-chat-note">Live Council events · Don’t share private details.</p>
+  </section>` : ''}</div>`;
+}
+
 function activitiesPage() {
   const home = route === 'home';
   const savedPage = route === 'saved';
@@ -164,6 +199,7 @@ function activitiesPage() {
   return `${home ? '<div class="hero-shell">' : ''}<section class="home-intro"><div class="eyebrow">${savedPage ? 'SAVED' : 'BRISBANE FAMILY ACTIVITIES'}</div><h1>${titles[route]}</h1><p class="intro">${savedPage ? 'Activities you want to try.' : 'Find free family activities, nearby markets and local clubs.'}</p>${home ? '<div class="hero-actions"><a class="button primary" href="#events">Find an activity</a><a class="button" href="#community">Find a club</a></div>' : ''}</section>${home ? '<div class="hero-picture" id="home-hero-image"><span class="image-fallback">' + icon('leaf',45) + '</span></div></div>' : ''}
     ${home ? `<div class="section-heading"><h2>Quick browse</h2><span class="subtle">A good place to start</span></div><div class="quick-grid">
       ${[['free', '', 'Free activities', 'No-cost ideas'], ['weekend', '', 'This weekend', 'Saturday and Sunday'], ['markets', '', 'Markets & secondhand', 'Markets and swaps'], ['near', '', 'Near me', 'Choose your suburb']].map(([id, icon, title, subtitle]) => `<button class="quick-card" data-quick="${id}"><span class="quick-icon" aria-hidden="true">${quickIcon(id)}</span><span><strong>${title}</strong><small>${subtitle}</small></span></button>`).join('')}</div>` : ''}
+    ${route === 'events' ? eventChatPanel() : ''}
     <div class="section-heading"><h2>${savedPage ? 'Saved activities' : home ? 'Explore activities' : 'Find your next activity'}</h2>${home ? '<a class="text-link" href="#events">View all events ↗</a>' : ''}</div>
     ${!savedPage ? eventFilterControls() : ''}
     <div id="feed-status" class="result-meta" role="status"></div><div class="event-grid" id="event-results"></div><div id="load-more" class="section-heading"></div>
@@ -171,14 +207,66 @@ function activitiesPage() {
 }
 let visibleLimit = 12;
 
-// Event filter matching uses Brisbane calendar dates, so "Next 7 days" includes today.
-function filteredEvents() {
+function dateContext() {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Brisbane' });
   const startOfToday = Date.parse(`${today}T00:00:00Z`);
   const addDays = days => new Date(startOfToday + days * 86400000).toISOString().slice(0, 10);
   const day = new Date(startOfToday).getUTCDay();
-  const saturday = addDays(day === 0 ? -1 : (6 - day + 7) % 7);
-  const sunday = addDays(day === 0 ? 0 : (7 - day) % 7);
+  return {
+    today,
+    addDays,
+    saturday: addDays(day === 0 ? -1 : (6 - day + 7) % 7),
+    sunday: addDays(day === 0 ? 0 : (7 - day) % 7)
+  };
+}
+
+function matchesEventDate(event, preference, dates) {
+  return preference === 'all' || preference === 'any' ||
+    (preference === 'today' && event.dateKey === dates.today) ||
+    (preference === 'weekend' && event.dateKey >= dates.saturday && event.dateKey <= dates.sunday) ||
+    (preference === 'next7' && event.dateKey >= dates.today && event.dateKey <= dates.addDays(6)) ||
+    (preference === 'next30' && event.dateKey >= dates.today && event.dateKey <= dates.addDays(29)) ||
+    event.dateKey === preference;
+}
+
+function eventAgeMatches(event, childAges) {
+  if (!childAges?.length) return true;
+  const ageText = `${event.ages || ''} ${(event.ageRanges || []).join(' ')}`.toLowerCase();
+  if (!ageText || /all ages|famil|everyone|check age/.test(ageText)) return true;
+  const ranges = [...ageText.matchAll(/(\d{1,2})\s*(?:-|–|—|to)\s*(\d{1,2})/g)]
+    .map(match => [Number(match[1]), Number(match[2])]);
+  const minimums = [...ageText.matchAll(/(?:ages?|aged)\s*(\d{1,2})\s*\+/g)].map(match => Number(match[1]));
+  const maximums = [...ageText.matchAll(/(?:under|up to)\s*(\d{1,2})/g)].map(match => Number(match[1]));
+  const explicit = ranges.length || minimums.length || maximums.length;
+  if (explicit) return childAges.some(age => ranges.some(([min, max]) => age >= min && age <= max) || minimums.some(min => age >= min) || maximums.some(max => age <= max));
+  return childAges.some(age =>
+    (age <= 2 && /bab|toddler|0.?3/.test(ageText)) ||
+    (age >= 3 && age <= 5 && /toddler|preschool|early childhood|0.?5|4.?7/.test(ageText)) ||
+    (age >= 6 && age <= 12 && /child|kid|primary|school age|4.?7|8.?12/.test(ageText)) ||
+    (age >= 13 && /teen|young people|youth/.test(ageText))
+  ) || !/bab|toddler|preschool|child|kid|primary|teen|youth/.test(ageText);
+}
+
+function eventMatchesSmartCriteria(event, dates) {
+  if (!smartCriteria) return true;
+  const searchable = `${event.title} ${event.category} ${event.suburb} ${event.venue} ${event.description} ${event.requirements} ${event.ages}`.toLowerCase();
+  const suburb = smartCriteria.suburb?.toLowerCase().trim();
+  const matchesSuburb = !suburb || event.suburb.toLowerCase().includes(suburb) || suburb.includes(event.suburb.toLowerCase());
+  const matchesInterests = !smartCriteria.interests?.length || smartCriteria.interests.includes(event.category) ||
+    smartCriteria.interests.some(interest => searchable.includes(interest.toLowerCase()));
+  const petTerms = /\b(?:dog|dogs|dog-friendly|pet|pets|pet-friendly|puppy|on-leash|off-leash)\b/i;
+  const matchesPet = !smartCriteria.petFriendly || petTerms.test(searchable);
+  const accessTerms = {wheelchair: /wheelchair|accessible/i, stroller: /stroller|pram|accessible/i, pram: /stroller|pram|accessible/i, 'sensory friendly': /sensory|quiet|low.?sensory/i};
+  const matchesAccess = !(smartCriteria.accessibility?.length) || smartCriteria.accessibility.every(need => (accessTerms[need.toLowerCase()] || new RegExp(need.replace(/[^a-z0-9 ]/gi, ''), 'i')).test(searchable));
+  return matchesSuburb && matchesInterests && matchesPet && matchesAccess &&
+    (!smartCriteria.freeOnly || event.cost === 0) &&
+    matchesEventDate(event, smartCriteria.date, dates) &&
+    eventAgeMatches(event, smartCriteria.childAges);
+}
+
+// Event filter matching uses Brisbane calendar dates, so "Next 7 days" includes today.
+function filteredEvents() {
+  const dates = dateContext();
   const query = eventFilters.search.toLowerCase().trim();
   const selectedSuburb = eventFilters.suburb.toLowerCase();
 
@@ -190,12 +278,7 @@ function filteredEvents() {
       event.category,
       event.description
     ].join(' ').toLowerCase();
-    const matchesDate = eventFilters.date === 'all' ||
-      (eventFilters.date === 'today' && event.dateKey === today) ||
-      (eventFilters.date === 'weekend' && event.dateKey >= saturday && event.dateKey <= sunday) ||
-      (eventFilters.date === 'next7' && event.dateKey >= today && event.dateKey <= addDays(6)) ||
-      (eventFilters.date === 'next30' && event.dateKey >= today && event.dateKey <= addDays(29)) ||
-      event.dateKey === eventFilters.date;
+    const matchesDate = matchesEventDate(event, eventFilters.date, dates);
     const matchesSuburb = eventFilters.suburb === 'All suburbs' ||
       event.suburb.toLowerCase() === selectedSuburb;
     const matchesCategory = eventFilters.category === 'All activities' ||
@@ -207,7 +290,8 @@ function filteredEvents() {
       matchesDate &&
       matchesSuburb &&
       matchesCategory &&
-      matchesFree;
+      matchesFree &&
+      eventMatchesSmartCriteria(event, dates);
   });
 }
 
@@ -223,6 +307,7 @@ function renderActiveFilters() {
   if (eventFilters.date !== 'all') filters.push(['date', `Date: ${dateFilterLabel(eventFilters.date)}`]);
   if (eventFilters.quick === 'free') filters.push(['quick', 'Free activities']);
   if (familyOnly) filters.push(['family', 'Family-suitable']);
+  if (smartCriteria) filters.push(['smart-all', 'AI recommendations']);
 
   const chips = filters.map(([key, label]) => `
     <span class="active-filter-chip">
@@ -276,6 +361,8 @@ function showEvent(id) {
 function removeEventFilter(filter) {
   if (filter === 'family') {
     familyOnly = false;
+  } else if (filter === 'smart-all' && smartCriteria) {
+    smartCriteria = null;
   } else if (Object.prototype.hasOwnProperty.call(eventFilters, filter)) {
     eventFilters[filter] = emptyEventFilters()[filter];
   } else {
@@ -290,8 +377,62 @@ function removeEventFilter(filter) {
 function clearEventFilters() {
   eventFilters = emptyEventFilters();
   familyOnly = false;
+  smartCriteria = null;
+  eventChatMessages = [{role: 'assistant', content: EVENT_CHAT_WELCOME}];
   visibleLimit = 12;
   render();
+}
+
+function resetEventChat() {
+  smartCriteria = null;
+  eventChatMessages = [{role: 'assistant', content: EVENT_CHAT_WELCOME}];
+  visibleLimit = 12;
+  render();
+}
+
+function criteriaSummary(criteria) {
+  const parts = [];
+  if (criteria.childAges?.length) parts.push(`age ${criteria.childAges.join(' + ')}`);
+  if (criteria.familySize) parts.push(`group of ${criteria.familySize}`);
+  if (criteria.petFriendly) parts.push('pet friendly');
+  if (criteria.freeOnly) parts.push('free');
+  if (criteria.date && criteria.date !== 'any') parts.push(dateFilterLabel(criteria.date).toLowerCase());
+  if (criteria.suburb) parts.push(`around ${criteria.suburb}`);
+  if (criteria.interests?.length) parts.push(criteria.interests.join(' or '));
+  if (criteria.accessibility?.length) parts.push(criteria.accessibility.join(' and '));
+  return parts;
+}
+
+function eventChatReply(criteria, matchCount) {
+  const summary = criteriaSummary(criteria);
+  if (!summary.length) return 'Add an age, suburb, date, budget or interest.';
+  if (!matchCount) return 'No exact matches yet. Remove one detail or try a nearby suburb.';
+  const shown = summary.slice(0, 4).join(' · ');
+  const extra = summary.length > 4 ? ` · +${summary.length - 4} more` : '';
+  return `${matchCount} ${matchCount === 1 ? 'match' : 'matches'} · ${shown}${extra}${criteria.petFriendly ? '. Pet suitability is confirmed from the listing text.' : ''}`;
+}
+
+async function submitEventChat(message) {
+  const clean = String(message || '').trim();
+  if (!clean || eventChatBusy) return;
+  eventChatMessages.push({role: 'user', content: clean});
+  eventChatOpen = true;
+  eventChatBusy = true;
+  render();
+  try {
+    const userMessages = eventChatMessages.filter(item => item.role === 'user').slice(-8);
+    const result = await Social.api('/ai/events', {method: 'POST', body: JSON.stringify({messages: userMessages})});
+    smartCriteria = result.criteria;
+    visibleLimit = 12;
+    const matches = filteredEvents().length;
+    eventChatMessages.push({role: 'assistant', content: eventChatReply(smartCriteria, matches)});
+  } catch (error) {
+    eventChatMessages.push({role: 'assistant', content: `I couldn’t update the recommendations just now. ${error.message}`});
+  } finally {
+    eventChatBusy = false;
+    render();
+    document.querySelector('#event-chat-log')?.scrollTo({top: 9999, behavior: 'smooth'});
+  }
 }
 
 // Home shortcuts open Events with the matching category, date or price filter.
@@ -326,6 +467,14 @@ function toggleEventQuickFilter(quick) {
 document.addEventListener('click', event => {
   const button = event.target.closest('button, [data-close]');
   if (!button) return;
+  if (button.hasAttribute('data-ai-toggle')) {
+    eventChatOpen = !eventChatOpen;
+    render();
+    if (eventChatOpen) setTimeout(() => document.querySelector('#event-chat-input')?.focus(), 0);
+    return;
+  }
+  if (button.hasAttribute('data-ai-reset')) { resetEventChat(); return; }
+  if (button.hasAttribute('data-ai-prompt')) { submitEventChat(button.dataset.aiPrompt); return; }
   if (button.matches('[data-close], .close-button')) modal.close();
   if (button.hasAttribute('data-save')) toggleSave(button.dataset.save);
   if (button.hasAttribute('data-event')) showEvent(button.dataset.event);
@@ -343,6 +492,13 @@ document.addEventListener('click', event => {
     return;
   }
   if (button.hasAttribute('data-quick')) openQuickFilter(button.dataset.quick);
+});
+
+document.addEventListener('submit', event => {
+  if (event.target.id !== 'event-chat-form') return;
+  event.preventDefault();
+  const input = event.target.elements.message;
+  submitEventChat(input.value);
 });
 
 // Text search updates results immediately without rebuilding the focused input.
