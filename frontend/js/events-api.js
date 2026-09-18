@@ -66,22 +66,30 @@ const CouncilEvents = (() => {
   }
   async function load(onProgress) {
     const now = new Date().toISOString();
-    const [first, locations] = await Promise.all([
-      page(0, now),
-      loadLocations().catch(() => new Map())
-    ]);
-    locationsByVenue = locations;
-    let rows = first.results;
-    const total = first.total_count;
-    onProgress(rows.map(normalize), total);
+    let rows = [];
+    let total = 0;
+    locationsByVenue = new Map();
+    const emit = () => onProgress([...new Map(rows.map(row => {
+      const event = normalize(row);
+      return [event.id, event];
+    })).values()], total);
+    const locationsReady = loadLocations().then(locations => {
+      locationsByVenue = locations;
+      if (rows.length) emit();
+    }).catch(() => {});
+    const first = await page(0, now);
+    rows = first.results;
+    total = first.total_count;
+    emit();
     // The BCC dataset currently holds the next 2,000 published events.
     // Fetch every available page, in small batches to avoid a request burst.
     for (let offset = 100; offset < Math.min(total, 10000); offset += 300) {
       const offsets = [offset, offset + 100, offset + 200].filter(value => value < Math.min(total, 10000));
       const pages = await Promise.all(offsets.map(value => page(value, now)));
       rows = rows.concat(pages.flatMap(result => result.results));
-      onProgress([...new Map(rows.map(row => { const event = normalize(row); return [event.id, event]; })).values()], total);
+      emit();
     }
+    await locationsReady;
     return total;
   }
   return { load, normalize };

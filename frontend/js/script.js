@@ -14,6 +14,7 @@ let feedTotal = 0;
 let saved = [];
 let familyOnly = true;
 let eventFilters = emptyEventFilters();
+let userLocation = null;
 const EVENT_CHAT_WELCOME = 'Tell me the age, suburb, date, budget and any needs.';
 let smartCriteria = null;
 let eventChatMessages = [{role: 'assistant', content: EVENT_CHAT_WELCOME}];
