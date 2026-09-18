@@ -44,6 +44,150 @@ const first = (db, sql, ...args) => db.prepare(sql).bind(...args).first();
 const run = (db, sql, ...args) => db.prepare(sql).bind(...args).run();
 async function bodyOf(request) { const raw = await request.text(); if (raw.length > 24000) fail(413, 'This entry is too large.'); try { return JSON.parse(raw); } catch { fail(400, 'Invalid request.'); } }
 
+const EVENT_CHAT_SCHEMA = {
+  type: 'object',
+  properties: {
+    childAges: {type: 'array', items: {type: 'integer', minimum: 0, maximum: 17}, maxItems: 8},
+    familySize: {type: 'integer', minimum: 0, maximum: 20},
+    petFriendly: {type: 'boolean'},
+    freeOnly: {type: 'boolean'},
+    date: {type: 'string', enum: ['any', 'today', 'weekend', 'next7', 'next30']},
+    suburb: {type: 'string', maxLength: 60},
+    interests: {type: 'array', items: {type: 'string', maxLength: 45}, maxItems: 8},
+    accessibility: {type: 'array', items: {type: 'string', enum: ['wheelchair', 'stroller', 'sensory friendly']}, maxItems: 3}
+  },
+  required: ['childAges', 'familySize', 'petFriendly', 'freeOnly', 'date', 'suburb', 'interests', 'accessibility'],
+  additionalProperties: false
+};
+
+function chatText(messages) {
+  return messages.filter(message => message.role === 'user').map(message => message.content).join(' ');
+}
+
+export function normaliseEventChatIntent(value = {}) {
+  const shortList = (items, limit) => Array.isArray(items)
+    ? [...new Set(items.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean))].slice(0, limit)
+    : [];
+  const interests = new Set(['Outdoors', 'Libraries', 'Creative', 'Markets & secondhand', 'Other activities']);
+  const accessNeeds = new Set(['wheelchair', 'stroller', 'sensory friendly']);
+  return {
+    childAges: Array.isArray(value.childAges)
+      ? [...new Set(value.childAges.filter(age => Number.isInteger(age) && age >= 0 && age <= 17))].slice(0, 8)
+      : [],
+    familySize: Number.isInteger(value.familySize) && value.familySize >= 1 && value.familySize <= 20 ? value.familySize : 0,
+    petFriendly: value.petFriendly === true,
+    freeOnly: value.freeOnly === true,
+    date: ['today', 'weekend', 'next7', 'next30'].includes(value.date) ? value.date : 'any',
+    suburb: typeof value.suburb === 'string' ? value.suburb.trim().slice(0, 60) : '',
+    interests: shortList(value.interests, 8).filter(item => interests.has(item)),
+    accessibility: shortList(value.accessibility, 3).filter(item => accessNeeds.has(item.toLowerCase())).map(item => item.toLowerCase())
+  };
+}
+
+// This keeps the core search usable when the Workers AI free allowance is busy.
+export function parseEventChatFallback(messages) {
+  const interestMap = [
+    [/\b(?:park|outdoor|nature|garden|walk|playground)\b/i, 'Outdoors'],
+    [/\b(?:library|book|reading|story)\b/i, 'Libraries'],
+    [/\b(?:art|craft|paint|creative|making)\b/i, 'Creative'],
+    [/\b(?:market|swap|second.?hand|garage sale)\b/i, 'Markets & secondhand'],
+    [/\b(?:sport|dance|music|animal|science|workshop)\b/i, 'Other activities']
+  ];
+  const accessMap = [
+    [/\bwheelchair\b/i, 'wheelchair'],
+    [/\bstroller|pram\b/i, 'stroller'],
+    [/\bquiet|sensory\b/i, 'sensory friendly']
+  ];
+  const criteria = normaliseEventChatIntent();
+  for (const message of messages.filter(item => item.role === 'user')) {
+    const input = message.content;
+    const lower = input.toLowerCase();
+    const ages = [];
+    for (const pattern of [/(\d{1,2})\s*(?:-|\s)?year(?:s)?(?:-|\s)?old\b/gi, /\bage(?:d)?\s+(\d{1,2})\b/gi, /\b(\d{1,2})\s*(?:yo|y\/o|yrs?)\b/gi]) {
+      for (const match of input.matchAll(pattern)) {
+        const age = Number(match[1]);
+        if (age <= 17) ages.push(age);
+      }
+    }
+    if (ages.length) criteria.childAges = [...new Set(ages)];
+    const family = lower.match(/\b(?:family|group)\s+of\s+(\d{1,2})\b/);
+    if (family) criteria.familySize = Number(family[1]);
+    if (/\b(?:dog|puppy|pet)\b/.test(lower)) criteria.petFriendly = !/\b(?:no|without|not bringing|leave)(?:\s+\w+){0,3}\s+(?:dog|puppy|pet)\b/.test(lower);
+    if (/\b(?:free|no.?cost|zero.?cost|without paying)\b/.test(lower)) criteria.freeOnly = true;
+    if (/\b(?:paid|not free|any price|doesn'?t need to be free)\b/.test(lower)) criteria.freeOnly = false;
+    if (/\btoday\b/.test(lower)) criteria.date = 'today';
+    else if (/\b(?:this )?weekend\b/.test(lower)) criteria.date = 'weekend';
+    else if (/\b(?:next|coming) (?:7 days|week)\b/.test(lower)) criteria.date = 'next7';
+    else if (/\b(?:next|coming) (?:30 days|month)\b/.test(lower)) criteria.date = 'next30';
+    const suburb = input.match(/\b(?:near|around|in)\s+([A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*){0,2})(?=\s*(?:,|\.|$|this\b|on\b|with\b|for\b))/);
+    if (suburb) criteria.suburb = suburb[1];
+    criteria.interests = [...new Set([...criteria.interests, ...interestMap.filter(([pattern]) => pattern.test(input)).map(([, interest]) => interest)])];
+    criteria.accessibility = [...new Set([...criteria.accessibility, ...accessMap.filter(([pattern]) => pattern.test(input)).map(([, need]) => need)])];
+  }
+  return normaliseEventChatIntent(criteria);
+}
+
+export function mergeEventChatIntent(messages, aiValue) {
+  const ai = normaliseEventChatIntent(aiValue);
+  const exact = parseEventChatFallback(messages);
+  const input = chatText(messages);
+  return normaliseEventChatIntent({
+    childAges: /\b(?:age|aged|years?(?:-|\s)old|yo|y\/o|yrs?)\b/i.test(input) ? exact.childAges : ai.childAges,
+    familySize: /\b(?:family|group)\s+of\s+\d/i.test(input) ? exact.familySize : ai.familySize,
+    petFriendly: /\b(?:dog|puppy|pet)\b/i.test(input) ? exact.petFriendly : ai.petFriendly,
+    freeOnly: /\b(?:free|cost|paid|price|paying)\b/i.test(input) ? exact.freeOnly : ai.freeOnly,
+    date: /\b(?:today|weekend|next week|coming week|7 days|30 days|month)\b/i.test(input) ? exact.date : ai.date,
+    suburb: exact.suburb || ai.suburb,
+    interests: [...new Set([...ai.interests, ...exact.interests])],
+    accessibility: [...new Set([...ai.accessibility, ...exact.accessibility])]
+  });
+}
+
+async function eventChat(request, env) {
+  const body = await bodyOf(request);
+  if (!Array.isArray(body.messages) || !body.messages.length || body.messages.length > 8) fail(400, 'Send between 1 and 8 chat messages.');
+  const messages = body.messages.map(message => {
+    if (!message || !['user', 'assistant'].includes(message.role)) fail(400, 'Chat messages must have a valid role.');
+    return {role: message.role, content: text(message.content, 'Chat message', 500)};
+  });
+  if (!messages.some(message => message.role === 'user')) fail(400, 'Write what your family needs first.');
+
+  let withinFreeAppLimit = false;
+  if (env.AI && env.DB && env.LOCAL_DEV !== 'true') {
+    try {
+      const day = new Date().toISOString().slice(0, 10);
+      const limit = Math.min(50, Math.max(1, Number(env.AI_DAILY_REQUEST_LIMIT) || 30));
+      const usage = await first(env.DB, `INSERT INTO ai_daily_usage (day,requests) VALUES (?,1)
+        ON CONFLICT(day) DO UPDATE SET requests=requests+1 RETURNING requests`, day);
+      withinFreeAppLimit = Number(usage?.requests) <= limit;
+    } catch (error) {
+      // A missing usage table or database problem must never become a paid or broken dependency.
+      console.warn('Workers AI daily limit unavailable:', error?.message || error);
+    }
+  }
+  if (env.AI && withinFreeAppLimit) {
+    try {
+      const result = await env.AI.run(env.AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+        messages: [
+          {
+            role: 'system',
+            content: 'Extract one combined family-event search from the conversation. Later user messages refine or replace earlier preferences. Use familySize 0 when absent and date any when absent. The words today, weekend, next week, next 7 days, next month, and next 30 days map to their exact date enum. Only put Brisbane suburb names in suburb. Map interests to Outdoors, Libraries, Creative, Markets & secondhand, or Other activities. Accessibility may only be wheelchair, stroller, or sensory friendly. Pets belong only in petFriendly, never accessibility. Return only the requested JSON object.'
+          },
+          ...messages
+        ],
+        response_format: {type: 'json_schema', json_schema: EVENT_CHAT_SCHEMA},
+        temperature: 0.1,
+        max_tokens: 320
+      });
+      const raw = typeof result?.response === 'string' ? JSON.parse(result.response) : result?.response;
+      return json({criteria: mergeEventChatIntent(messages, raw), source: 'ai'});
+    } catch (error) {
+      console.warn('Workers AI event chat fallback:', error?.message || error);
+    }
+  }
+  return json({criteria: parseEventChatFallback(messages), source: 'rules'});
+}
+
 function base64Url(bytes) { let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, ''); }
 function randomToken(size = 32) { const bytes = new Uint8Array(size); crypto.getRandomValues(bytes); return base64Url(bytes); }
 async function hashToken(value) { const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)); return base64Url(new Uint8Array(digest)); }
@@ -209,6 +353,7 @@ async function handleRequest(request, env) {
   if (path === '/api/auth/register' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return registerAccount(request, env); }
   if (path === '/api/auth/login' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return loginAccount(request, env); }
   if (path === '/api/auth/logout' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return logout(request, env); }
+  if (path === '/api/ai/events' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return eventChat(request, env); }
 
   const {auth, user} = await authenticate(request, env);
   if (!['GET', 'HEAD'].includes(method) && !trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.');
