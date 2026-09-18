@@ -14,6 +14,7 @@ let feedTotal = 0;
 let saved = [];
 let familyOnly = true;
 let eventFilters = emptyEventFilters();
+let eventDetailsOpen = false;
 let userLocation = null;
 const EVENT_CHAT_WELCOME = 'Tell me the age, suburb, date, budget and any needs.';
 let smartCriteria = null;
@@ -84,6 +85,7 @@ function render() {
   document.title = `${route === 'home' ? 'Home' : route[0].toUpperCase() + route.slice(1)} · Family Finds`;
   // Scope larger type to Events without changing the other site pages.
   document.body.classList.toggle('events-route', route === 'events');
+  document.body.classList.toggle('event-filters-expanded', route === 'events' && eventDetailsOpen);
   if (Social.handles(route)) { Social.show(route); updateCount(); return; }
   main.innerHTML = activitiesPage();
   renderEventResults();
@@ -167,17 +169,30 @@ function eventFilterControls() {
               data-event-quick="${id}" aria-pressed="${active}">${quickIcon(id)} ${label}</button>`).join('')}
         </div>
       </div>
-      <span class="event-filter-label">More filters</span>` : ''}
+      <button type="button" class="event-filter-toggle" data-filter-toggle
+        aria-expanded="${eventDetailsOpen}" aria-controls="event-filter-details">
+        ${icon('filters', 18)} <span>Filters</span><span class="event-filter-count" data-filter-count hidden></span>
+        <span class="event-filter-chevron" aria-hidden="true"></span>
+      </button>
+      <div id="event-filter-details" class="event-filter-details${eventDetailsOpen ? ' is-open' : ''}">
+      <span class="event-filter-label event-detailed-label">More filters</span>` : ''}
     <div class="search-row event-filter-row event-more-filters">
-      <label class="event-date-picker">
+      <label class="event-date-picker event-filter-field">
+        <span class="event-field-label">Date</span>
         <input type="date" id="event-date" aria-label="Activity date" value="${selectedDate}">
       </label>
-      <select id="event-category" aria-label="Activity category">
-        ${options(categories, eventFilters.category)}
-      </select>
-      <select id="event-suburb" aria-label="Suburb">
-        ${options(suburbOptions(), eventFilters.suburb)}
-      </select>
+      <label class="event-filter-field">
+        <span class="event-field-label">Activity</span>
+        <select id="event-category" aria-label="Activity category">
+          ${options(categories, eventFilters.category)}
+        </select>
+      </label>
+      <label class="event-filter-field event-suburb-field">
+        <span class="event-field-label">Suburb</span>
+        <select id="event-suburb" aria-label="Suburb">
+          ${options(suburbOptions(), eventFilters.suburb)}
+        </select>
+      </label>
     </div>
     <div class="event-secondary-filters">
       <details class="event-price-filter">
@@ -198,9 +213,20 @@ function eventFilterControls() {
             aria-label="Apply price filter">Apply</button>
         </div>
       </details>
-      <label class="family-filter"><input type="checkbox" id="family-only" ${familyOnly ? 'checked' : ''}> Family-suitable activities only</label>
+      <label class="family-filter"><input type="checkbox" id="family-only" ${familyOnly ? 'checked' : ''}> Family-friendly only</label>
     </div>
+    ${route === 'events' ? '<button type="button" class="button primary event-filter-done" data-filter-close>Show results</button></div>' : ''}
     <div id="active-filter" role="group" aria-label="Active filters"></div>`;
+}
+
+// Update the mobile disclosure without rebuilding inputs or losing focus.
+function setEventDetailsOpen(open) {
+  eventDetailsOpen = open;
+  document.body.classList.toggle('event-filters-expanded', open);
+  const toggle = document.querySelector('[data-filter-toggle]');
+  toggle?.setAttribute('aria-expanded', String(open));
+  document.querySelector('#event-filter-details')?.classList.toggle('is-open', open);
+  if (!open) toggle?.focus();
 }
 
 function eventChatPanel() {
@@ -241,7 +267,7 @@ function activitiesPage() {
     ${home ? `<div class="section-heading"><h2>Quick browse</h2><span class="subtle">A good place to start</span></div><div class="quick-grid">
       ${[['free', '', 'Free activities', 'No-cost ideas'], ['weekend', '', 'This weekend', 'Saturday and Sunday'], ['markets', '', 'Markets & secondhand', 'Markets and swaps'], ['near', '', 'Near me', 'Choose your suburb']].map(([id, icon, title, subtitle]) => `<button class="quick-card" data-quick="${id}"><span class="quick-icon" aria-hidden="true">${quickIcon(id)}</span><span><strong>${title}</strong><small>${subtitle}</small></span></button>`).join('')}</div>` : ''}
     ${route === 'events' ? eventChatPanel() : ''}
-    <div class="section-heading"><h2>${savedPage ? 'Saved activities' : home ? 'Explore activities' : 'Find your next activity'}</h2>${home ? '<a class="text-link" href="#events">View all events ↗</a>' : ''}</div>
+    <div class="section-heading event-results-heading"><h2>${savedPage ? 'Saved activities' : home ? 'Explore activities' : 'Find your next activity'}</h2>${home ? '<a class="text-link" href="#events">View all events ↗</a>' : ''}</div>
     ${!savedPage ? (route === 'events' ? `<section class="event-filter-panel" aria-label="Filter activities">${eventFilterControls()}</section>` : eventFilterControls()) : ''}
     <div id="feed-status" class="result-meta" role="status"></div><div class="event-grid" id="event-results"></div><div id="load-more" class="section-heading"></div>
     ${home ? `<section class="community-callout"><div><div class="eyebrow">LOCAL CLUBS</div><h2>Share a local find.</h2><p>Plan an activity or meet nearby families.</p></div><a class="button" href="#community">Visit community <span aria-hidden="true">↗</span></a></section>` : ''}`;
@@ -360,16 +386,35 @@ function renderActiveFilters() {
   if (familyOnly) filters.push(['family', 'Family-suitable']);
   if (smartCriteria) filters.push(['smart-all', 'AI recommendations']);
 
+  const quickStates = {
+    free: eventFilters.quick === 'free',
+    weekend: eventFilters.date === 'weekend',
+    markets: eventFilters.category === 'Markets & secondhand',
+    near: eventFilters.near
+  };
+  document.querySelectorAll('[data-event-quick]').forEach(button => {
+    const selected = quickStates[button.dataset.eventQuick];
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+
+  const count = document.querySelector('[data-filter-count]');
+  if (count) {
+    count.textContent = filters.length;
+    count.hidden = filters.length === 0;
+    count.setAttribute('aria-label', `${filters.length} active ${filters.length === 1 ? 'filter' : 'filters'}`);
+  }
+
   const chips = filters.map(([key, label]) => `
     <span class="active-filter-chip">
-      ${escapeHTML(label)}
+      <span class="active-filter-name">${escapeHTML(label)}</span>
       <button type="button" data-remove-filter="${key}"
         aria-label="Remove ${escapeHTML(label)} filter">×</button>
     </span>`
   ).join('');
   active.innerHTML = filters.length ? `
     <div class="active-filter-list">
-      ${chips}
+      <div class="active-filter-chips">${chips}</div>
       <button class="active-filter-clear" type="button" data-reset>Clear all</button>
     </div>` : '';
 }
@@ -557,6 +602,8 @@ function toggleEventQuickFilter(quick) {
 document.addEventListener('click', event => {
   const button = event.target.closest('button, [data-close]');
   if (!button) return;
+  if (button.hasAttribute('data-filter-toggle')) { setEventDetailsOpen(!eventDetailsOpen); return; }
+  if (button.hasAttribute('data-filter-close')) { setEventDetailsOpen(false); return; }
   if (button.hasAttribute('data-ai-toggle')) {
     eventChatOpen = !eventChatOpen;
     render();
