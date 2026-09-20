@@ -23,9 +23,12 @@ The website uses plain HTML, CSS and JavaScript. Its interface is designed to be
 | Event source | Brisbane City Council Open Data API | Supplies current Brisbane events and activities without an API key. |
 | Backend API | Cloudflare Worker | Validates requests, manages accounts and runs community features. |
 | Database | Cloudflare D1 | Stores profiles, clubs, discussions, saved events and event interest. |
+| AI event finder | Cloudflare Workers AI with local fallback | Converts a short family conversation into filters without a paid API key. |
 | Authentication | Built-in email and password accounts | Creates secure sessions without Google login or another paid service. |
 
 The project is designed to use free services only. The UQ Team Zone hosts the frontend, and the backend uses the Cloudflare Workers and D1 Free plans. If a Cloudflare free-plan daily limit is reached, requests fail until the limit resets instead of the project automatically upgrading.
+
+The floating Ask AI chat is also designed for the Free plan. The application allows at most 30 Workers AI calls per UTC day across the prototype. After that limit, or whenever Workers AI is unavailable, it applies a built-in rules-based matcher instead. No paid AI key is configured, chat messages are not stored, and event cards always come from the Brisbane City Council feed.
 
 ## How the system works
 
@@ -76,6 +79,7 @@ The Worker provides these groups of API functions:
 | Discussions | Create posts, read discussions, reply and add helpful reactions. |
 | Saved events | Save or remove a council activity for a signed-in account. |
 | Event interest | Record interest and find interested members from shared clubs. |
+| AI event finder | Extract age, group size, pet, cost, date, suburb, interest and accessibility filters from a short conversation. |
 
 ### Account and session flow
 
@@ -101,6 +105,7 @@ Cloudflare D1 is a serverless SQL database. The schema is managed by the numbere
 | `reactions` | Helpful reactions from members. |
 | `saved` | Council events saved by each account. |
 | `event_interest` | Events that members want to attend. |
+| `ai_daily_usage` | Daily application-level count used to protect the free Workers AI allowance. |
 
 ### Validation and privacy
 
@@ -146,6 +151,7 @@ Home links use `index.html` with no `#home` suffix. Inner views use hashes so Ev
 
 - Responsive, mobile-first navigation with icons for Home, Events, Saved and Community.
 - Live Brisbane City Council activities with search, category, suburb, free, weekend and family filters.
+- Floating Ask AI chat that remembers the current conversation and filters real event listings.
 - Email and password registration, login, logout, profiles and privacy settings.
 - Account-based saved activities and event interest.
 - Clubs based on suburb, interests and family age groups.
@@ -295,6 +301,6 @@ Configuration:
 - For local Google sign-in, also register `http://localhost` and `http://localhost:3000` (or the actual preview port). Use that registered hostname when opening the preview.
 - Redirect URIs may stay empty for this popup/callback flow.
 - While the Google project is in Testing, configure intended test accounts under Audience. Change the publishing status when ready for public use.
-- Deploy the updated Worker with `npm run deploy:backend` and upload the updated frontend to UQ using the deployment steps above. Existing databases need migrations through `0003`; this feature adds no new migration.
+- Deploy the updated Worker with `npm run deploy:backend` and upload the updated frontend to UQ using the deployment steps above. Existing databases need migrations through `0004`; the last migration adds only the free AI daily-usage counter.
 
-Run `npm test` with Node 22.13+ to check signed-token validation, account creation, repeat login, email collision handling, password login, origin checks and logout against an in-memory SQLite database. Tests use generated test keys and never real Google credentials. A real Google popup sign-in still needs a user to complete it on a registered origin.
+Run `npm test` with Node 22.13+ to check AI intent validation and fallback matching alongside signed-token validation, account creation, repeat login, email collision handling, password login, origin checks and logout against an in-memory SQLite database. Tests use generated test keys and never real Google credentials. A real Google popup sign-in still needs a user to complete it on a registered origin.
