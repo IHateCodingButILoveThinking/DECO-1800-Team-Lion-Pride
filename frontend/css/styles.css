@@ -550,14 +550,9 @@ body.events-route .event-card .interest-pill {
   .event-chat-note { display: none; }
 }
 
-/* Keep event filters together and predictable across desktop and mobile. */
+/* Open filter rows adapt to the page width without an enclosing card. */
 body.events-route .event-filter-panel {
-  margin-bottom: 18px;
-  padding: 22px 24px 18px;
-  border: 1px solid #e2e8f0;
-  border-radius: 24px;
-  background: #fff;
-  box-shadow: 0 8px 30px #24446a08;
+  margin-bottom: 22px;
 }
 body.events-route .event-filter-panel .event-filter-row {
   margin: 0;
@@ -570,7 +565,7 @@ body.events-route .event-filter-panel #event-search {
   height: 48px;
   min-height: 48px;
   padding-left: 44px;
-  background: #f8fafc;
+  background: #fff;
   font-size: .9rem;
 }
 body.events-route .event-filter-panel .event-filter-section {
@@ -582,7 +577,7 @@ body.events-route .event-filter-panel .event-filter-label {
 body.events-route .event-filter-panel .event-quick-filters {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 9px;
+  gap: 12px;
 }
 body.events-route .event-filter-panel .event-quick-filter {
   width: 100%;
@@ -607,7 +602,7 @@ body.events-route .event-filter-panel .event-date-picker input {
   width: 100%;
   height: 44px;
   min-height: 44px;
-  background-color: #f8fafc;
+  background-color: #fff;
 }
 body.events-route .event-filter-panel .event-secondary-filters {
   flex-wrap: wrap;
@@ -617,15 +612,14 @@ body.events-route .event-filter-panel .event-secondary-filters {
 body.events-route .event-filter-panel .event-price-filter summary {
   height: 42px;
   min-height: 42px;
-  background-color: #f8fafc;
+  background-color: #fff;
 }
 body.events-route .event-filter-panel .family-filter {
   margin: 0;
 }
 body.events-route .event-filter-panel .active-filter-list {
   margin: 16px 0 0;
-  padding-top: 14px;
-  border-top: 1px solid #eef1f5;
+  padding-top: 0;
 }
 @media (max-width: 760px) {
   body.events-route.event-filters-expanded .event-chat-launcher { display: none; }
@@ -635,7 +629,7 @@ body.events-route .event-filter-panel .active-filter-list {
   body.events-route .home-intro .eyebrow { font-size: .65rem; }
   body.events-route .home-intro .intro { max-width: 440px; font-size: .875rem; }
   body.events-route .event-results-heading { display: none; }
-  body.events-route .event-filter-panel { padding: 14px; border-radius: 18px; margin-bottom: 12px; box-shadow: none; }
+  body.events-route .event-filter-panel { margin-bottom: 16px; }
   body.events-route .event-filter-panel #event-search { height: 46px; min-height: 46px; font-size: 1rem; padding-left: 38px; }
   body.events-route .event-filter-panel .search-field > span { left: 12px; }
   body.events-route .event-filter-panel .event-filter-section { margin: 10px 0; }
@@ -652,7 +646,7 @@ body.events-route .event-filter-panel .active-filter-list {
     padding: 9px 12px;
     border: 1px solid #dce3eb;
     border-radius: 12px;
-    background: #f8fafc;
+    background: #fff;
     font-size: .875rem;
     font-weight: 600;
     text-align: left;
@@ -678,7 +672,7 @@ body.events-route .event-filter-panel .active-filter-list {
   body.events-route .event-filter-panel .family-filter { min-height: 44px; font-size: .875rem; color: #465260; }
   body.events-route .event-filter-panel .family-filter input { width: 20px; height: 20px; flex-shrink: 0; }
   .event-filter-done { display: flex; width: 100%; min-height: 44px; margin-top: 10px; }
-  body.events-route .event-filter-panel .active-filter-list { flex-wrap: nowrap; gap: 6px; margin-top: 10px; padding-top: 10px; }
+  body.events-route .event-filter-panel .active-filter-list { flex-wrap: nowrap; gap: 6px; margin-top: 10px; padding-top: 0; }
   body.events-route .event-filter-panel .active-filter-chips { display: flex; flex: 1; min-width: 0; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
   body.events-route .event-filter-panel .active-filter-chip { flex: 0 0 auto; max-width: min(240px, 100%); min-height: 44px; padding-right: 44px; font-size: .75rem; }
   body.events-route .event-filter-panel .active-filter-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

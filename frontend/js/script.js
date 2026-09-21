@@ -11,8 +11,18 @@ let route = 'home';
 let events = [];
 let feedState = 'loading';
 let feedTotal = 0;
+let feedOffset = 0;
+let feedHasMore = false;
+let feedQueryKey = '';
+let feedVersion = 0;
+let feedController;
+let feedTimer;
+let feedPromise;
+let loading = false;
+let eventSuburbs = [];
+let suburbsPending = false;
 let saved = [];
-let familyOnly = true;
+let familyOnly = false;
 let eventFilters = emptyEventFilters();
 let eventDetailsOpen = false;
 let userLocation = null;
@@ -88,6 +98,8 @@ function render() {
   document.body.classList.toggle('event-filters-expanded', route === 'events' && eventDetailsOpen);
   if (Social.handles(route)) { Social.show(route); updateCount(); return; }
   main.innerHTML = activitiesPage();
+  ensureEventSearch();
+  if (route === 'home' || (route === 'events' && (eventDetailsOpen || matchMedia('(min-width: 761px)').matches))) ensureSuburbOptions();
   renderEventResults();
   updateCount();
 }
@@ -95,7 +107,7 @@ function options(values, selected) { return values.map(value => `<option ${value
 
 // Build the suburb list from live events, without prioritising any location.
 function suburbOptions() {
-  const suburbs = [...new Set(events.map(event => event.suburb).filter(Boolean))]
+  const suburbs = [...new Set([...eventSuburbs, ...events.map(event => event.suburb), eventFilters.suburb === 'All suburbs' ? '' : eventFilters.suburb].filter(Boolean))]
     .sort((a, b) => a.localeCompare(b));
   return ['All suburbs', ...suburbs];
 }
@@ -226,6 +238,7 @@ function setEventDetailsOpen(open) {
   const toggle = document.querySelector('[data-filter-toggle]');
   toggle?.setAttribute('aria-expanded', String(open));
   document.querySelector('#event-filter-details')?.classList.toggle('is-open', open);
+  if (open) ensureSuburbOptions();
   if (!open) toggle?.focus();
 }
 
@@ -334,17 +347,9 @@ function eventMatchesSmartCriteria(event, dates) {
 // Event filter matching uses Brisbane calendar dates, so "Next 7 days" includes today.
 function filteredEvents() {
   const dates = dateContext();
-  const query = eventFilters.search.toLowerCase().trim();
   const selectedSuburb = eventFilters.suburb.toLowerCase();
 
   const matches = events.filter(event => {
-    const searchableText = [
-      event.title,
-      event.venue,
-      event.suburb,
-      event.category,
-      event.description
-    ].join(' ').toLowerCase();
     const matchesDate = matchesEventDate(event, eventFilters.date, dates);
     const matchesSuburb = eventFilters.suburb === 'All suburbs' ||
       event.suburb.toLowerCase() === selectedSuburb;
@@ -358,11 +363,12 @@ function filteredEvents() {
     const matchesNear = !eventFilters.near || (distance !== null && distance <= 10);
 
     return (!familyOnly || event.family) &&
-      searchableText.includes(query) &&
       matchesDate &&
       matchesSuburb &&
       matchesCategory &&
       matchesFree &&
+      matchesPrice &&
+      matchesNear &&
       eventMatchesSmartCriteria(event, dates);
   });
   return eventFilters.near
@@ -431,20 +437,22 @@ function renderEventResults() {
   if (hero && heroEvent && hero.dataset.event !== heroEvent.id) { hero.dataset.event = heroEvent.id; hero.innerHTML = `<img src="${escapeHTML(heroEvent.image)}" alt="${escapeHTML(heroEvent.title)}" referrerpolicy="no-referrer"><div class="hero-caption"><strong>${escapeHTML(heroEvent.title)}</strong>${escapeHTML(heroEvent.suburb)} · ${escapeHTML(heroEvent.costLabel)}</div>`; }
   const list = route === 'saved' ? saved : filteredEvents();
   const limit = route === 'home' ? 6 : visibleLimit;
-  document.querySelector('#event-results').innerHTML = list.length ? list.slice(0, limit).map(eventCard).join('') : `<div class="empty-state"><h3>${route === 'saved' ? 'Your next family day starts here.' : feedState === 'loading' ? 'Finding activities around Brisbane…' : feedState === 'error' ? 'Council events are unavailable right now.' : 'No activities match just yet.'}</h3><p>${route === 'saved' ? (Social.profile() ? 'Tap the heart on an activity to keep it here.' : 'Log in to save activities and find them on any device.') : feedState === 'loading' ? 'Loading the latest published council listings.' : feedState === 'error' ? 'Please try again in a moment. We haven’t replaced live results with sample events.' : 'Try another suburb, category or search.'}</p>${route === 'saved' ? `<a class="button" href="${Social.profile() ? '#events' : '#login'}">${Social.profile() ? 'Explore activities' : 'Log in to save activities'}</a>` : feedState === 'error' ? '<button class="button" data-retry>Try again</button>' : feedState !== 'loading' ? '<button class="button" data-reset>Clear filters</button>' : ''}</div>`;
-  // Show the filtered match count separately from the live feed loading state.
-  const feedSummary = feedState === 'loading'
-    ? `Loading council listings (${events.length}${feedTotal ? ` of ${feedTotal}` : ''})…`
-    : feedState === 'error'
-      ? `Live feed interrupted; ${events.length} listings loaded.`
-      : `${events.length} live council activities`;
+  document.querySelector('#event-results').innerHTML = list.length ? list.slice(0, limit).map(eventCard).join('') : `<div class="empty-state"><h3>${route === 'saved' ? 'Your next family day starts here.' : feedState === 'loading' ? 'Finding activities around Brisbane…' : feedState === 'error' ? 'Council events are unavailable right now.' : feedHasMore ? 'No matches in this batch.' : 'No activities match just yet.'}</h3><p>${route === 'saved' ? (Social.profile() ? 'Tap the heart on an activity to keep it here.' : 'Log in to save activities and find them on any device.') : feedState === 'loading' ? 'Looking for activities that match your choices.' : feedState === 'error' ? 'Please try again in a moment.' : feedHasMore ? 'Load more to check further activities, or change your filters.' : 'Try another suburb, category or search.'}</p>${route === 'saved' ? `<a class="button" href="${Social.profile() ? '#events' : '#login'}">${Social.profile() ? 'Explore activities' : 'Log in to save activities'}</a>` : feedState === 'error' ? '<button class="button" data-retry>Try again</button>' : feedState !== 'loading' && !feedHasMore ? '<button class="button" data-reset>Clear filters</button>' : ''}</div>`;
+  const hasMore = list.length > limit || feedHasMore;
+  const shown = Math.min(list.length, limit);
+  const feedSummary = feedState === 'loading' ? 'Loading activities…'
+    : feedState === 'error' ? 'Couldn’t finish loading.'
+    : `${shown} ${shown === 1 ? 'activity' : 'activities'}${hasMore ? ' · more available' : ''}`;
   const status = route === 'saved'
     ? `${list.length} saved ${list.length === 1 ? 'activity' : 'activities'}`
-    : `${list.length} matches · ${feedSummary}`;
+    : feedSummary;
   document.querySelector('#feed-status').textContent = status;
   if (feedState === 'error' && events.length && route !== 'saved') document.querySelector('#feed-status').insertAdjacentHTML('beforeend',' <button class="button small" data-retry>Retry</button>');
   const more = document.querySelector('#load-more');
-  more.innerHTML = route !== 'home' && list.length > limit ? `<button class="button" data-more>Show more activities (${list.length - limit} remaining)</button>` : '';
+  more.innerHTML = route === 'saved'
+    ? (list.length > limit ? '<button class="button" data-more>Show more activities</button>' : '')
+    : route !== 'home' && hasMore && feedState !== 'error'
+      ? `<button class="button" data-more ${loading ? 'disabled' : ''}>${loading ? 'Loading…' : 'Load more activities'}</button>` : '';
   renderActiveFilters();
 }
 function showDialog(html) { content.innerHTML = html; modal.removeAttribute('data-event-id'); if (!modal.open) modal.showModal(); }
@@ -499,7 +507,7 @@ function removeEventFilter(filter) {
   render();
 }
 
-// "Clear all" also turns off the default family-suitable checkbox.
+// Start over with every filter off.
 function clearEventFilters() {
   eventFilters = emptyEventFilters();
   userLocation = null;
@@ -533,10 +541,10 @@ function criteriaSummary(criteria) {
 function eventChatReply(criteria, matchCount) {
   const summary = criteriaSummary(criteria);
   if (!summary.length) return 'Add an age, suburb, date, budget or interest.';
-  if (!matchCount) return 'No exact matches yet. Remove one detail or try a nearby suburb.';
+  if (!matchCount) return feedHasMore ? 'No matches in this batch. Tap Load more activities, or try fewer details.' : 'No exact matches yet. Remove one detail or try a nearby suburb.';
   const shown = summary.slice(0, 4).join(' · ');
   const extra = summary.length > 4 ? ` · +${summary.length - 4} more` : '';
-  return `${matchCount} ${matchCount === 1 ? 'match' : 'matches'} · ${shown}${extra}${criteria.petFriendly ? '. Pet suitability is confirmed from the listing text.' : ''}`;
+  return `${matchCount} ${matchCount === 1 ? 'match' : 'matches'}${feedHasMore ? ' so far' : ''} · ${shown}${extra}${criteria.petFriendly ? '. Pet suitability is confirmed from the listing text.' : ''}`;
 }
 
 async function submitEventChat(message) {
@@ -551,6 +559,8 @@ async function submitEventChat(message) {
     const result = await Social.api('/ai/events', {method: 'POST', body: JSON.stringify({messages: userMessages})});
     smartCriteria = result.criteria;
     visibleLimit = 12;
+    await ensureEventSearch();
+    if (feedState === 'error') throw new Error('Council events could not be loaded. Please try again.');
     const matches = filteredEvents().length;
     eventChatMessages.push({role: 'assistant', content: eventChatReply(smartCriteria, matches)});
   } catch (error) {
@@ -617,7 +627,12 @@ document.addEventListener('click', event => {
   if (button.hasAttribute('data-event')) showEvent(button.dataset.event);
   if (button.hasAttribute('data-share-event')) { const event = findEvent(button.dataset.shareEvent); if (event) { modal.close(); Social.compose({title:event.title,body:'Anyone interested in going together?',link:event.url}); } }
   if (button.hasAttribute('data-event-interest')) Social.toggleEventInterest(button.dataset.eventInterest);
-  if (button.hasAttribute('data-more')) { visibleLimit += 12; renderEventResults(); }
+  if (button.hasAttribute('data-more')) {
+    if (loading && route !== 'saved') return;
+    visibleLimit += 12;
+    if (route !== 'saved' && filteredEvents().length < visibleLimit && feedHasMore) loadEvents();
+    else renderEventResults();
+  }
   if (button.hasAttribute('data-reset')) { clearEventFilters(); return; }
   if (button.hasAttribute('data-remove-filter')) {
     removeEventFilter(button.dataset.removeFilter);
@@ -656,6 +671,7 @@ document.addEventListener('input', event => {
   if (event.target.id === 'event-search') {
     eventFilters.search = event.target.value;
     visibleLimit = 12;
+    ensureEventSearch(350);
     renderEventResults();
   } else if (event.target.id === 'event-price-range') {
     document.querySelector('#event-price-value').textContent = event.target.value === '100' ? '$100+' : `$${event.target.value}`;
@@ -677,29 +693,100 @@ document.addEventListener('change', event => {
   else return;
 
   visibleLimit = 12;
+  ensureEventSearch();
   renderEventResults();
 });
+document.addEventListener('focusin', event => { if (event.target.id === 'event-suburb') ensureSuburbOptions(); });
 modal.addEventListener('click', event => { if (event.target === modal) { const bounds = modal.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) modal.close(); } });
 window.addEventListener('hashchange', () => { if (modal.open) modal.close(); visibleLimit = 12; render(); main.focus(); window.scrollTo(0,0); });
 window.addEventListener('popstate', () => { if (!location.hash) { visibleLimit = 12; render(); main.focus(); window.scrollTo(0,0); } });
-let loading = false;
+function eventRequestFilters() {
+  const dates = dateContext();
+  const dateRanges = [eventFilters.date, smartCriteria?.date].map(value => {
+    if (value === 'today') return {start: dates.today, end: dates.today};
+    if (value === 'weekend') return {start: dates.saturday, end: dates.sunday};
+    if (value === 'next7') return {start: dates.today, end: dates.addDays(6)};
+    if (value === 'next30') return {start: dates.today, end: dates.addDays(29)};
+    return /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? {start: value, end: value} : null;
+  }).filter(Boolean);
+  return {
+    search: eventFilters.search.trim(), category: eventFilters.category, dateRanges,
+    suburbs: [eventFilters.suburb === 'All suburbs' ? '' : eventFilters.suburb, smartCriteria?.suburb].filter(Boolean),
+    freeOnly: eventFilters.quick === 'free' || smartCriteria?.freeOnly,
+    familyOnly, petFriendly: smartCriteria?.petFriendly, accessibility: smartCriteria?.accessibility
+  };
+}
+
+// Cancel superseded searches; rerendering or changing routes reuses the current query.
+function ensureEventSearch(delay = 0) {
+  if (!['home', 'events'].includes(route)) return Promise.resolve();
+  const key = JSON.stringify([eventFilters, familyOnly, smartCriteria, userLocation]);
+  if (key === feedQueryKey) return feedPromise || Promise.resolve();
+  feedQueryKey = key;
+  feedVersion += 1;
+  feedController?.abort();
+  clearTimeout(feedTimer);
+  loading = false;
+  feedOffset = 0;
+  feedHasMore = false;
+  feedTotal = 0;
+  events = [];
+  feedState = 'loading';
+  if (delay) {
+    feedPromise = null;
+    feedTimer = setTimeout(() => { feedPromise = loadEvents(); }, delay);
+    return Promise.resolve();
+  }
+  feedPromise = loadEvents();
+  return feedPromise;
+}
+
 async function loadEvents() {
   if (loading) return;
-  loading = true; feedState = 'loading'; renderEventResults();
+  const version = feedVersion;
+  const filters = eventRequestFilters();
+  const controller = new AbortController();
+  feedController = controller;
+  loading = true;
+  feedState = 'loading';
+  renderEventResults();
   try {
-    await CouncilEvents.load((loaded, total) => {
-      events = loaded; feedTotal = total;
-      renderEventResults();
-      const suburbs = document.querySelector('#event-suburb');
-      // Add newly discovered suburbs while preserving the current selection.
-      if (suburbs) suburbs.innerHTML = options(suburbOptions(), eventFilters.suburb);
-    });
+    // Filters may need a few candidate pages, but never scan the whole feed automatically.
+    for (let pages = 0; pages < 3; pages += 1) {
+      const page = await CouncilEvents.loadPage(filters, feedOffset, controller.signal);
+      if (version !== feedVersion) return;
+      events = [...new Map([...events, ...page.events].map(event => [event.id, event])).values()];
+      feedTotal = page.total;
+      feedOffset = page.nextOffset;
+      feedHasMore = page.hasMore;
+      if (!feedHasMore || filteredEvents().length >= visibleLimit) break;
+    }
     feedState = 'ready';
-  } catch (error) { feedState = 'error'; console.warn('Council events could not finish loading:', error.message); }
-  finally { loading = false; renderEventResults(); }
+  } catch (error) {
+    if (version !== feedVersion || controller.signal.aborted) return;
+    feedState = 'error';
+    console.warn('Council events could not finish loading:', error.message);
+  } finally {
+    if (version === feedVersion) {
+      loading = false;
+      const suburbs = document.querySelector('#event-suburb');
+      if (suburbs) suburbs.innerHTML = options(suburbOptions(), eventFilters.suburb);
+      renderEventResults();
+    }
+  }
+}
+
+async function ensureSuburbOptions() {
+  if (suburbsPending || eventSuburbs.length) return;
+  suburbsPending = true;
+  try {
+    eventSuburbs = await CouncilEvents.loadSuburbs();
+    const select = document.querySelector('#event-suburb');
+    if (select) select.innerHTML = options(suburbOptions(), eventFilters.suburb);
+  } catch (error) { console.warn('Suburb options could not be loaded:', error.message); }
+  finally { suburbsPending = false; }
 }
 render();
-loadEvents();
 Social.init();
 
 // Progressive enhancement; ordinary browsers do not need WebMCP support.
@@ -717,6 +804,7 @@ if (document.modelContext?.registerTool) {
         if (location.hash !== '#events') {
           await new Promise(resolve => { window.addEventListener('hashchange', resolve, { once: true }); navigate('events'); });
         } else render();
+        await ensureEventSearch();
         return { feedState, matches: filteredEvents().length, activities: filteredEvents().slice(0,12).map(({id,title,date,suburb,costLabel}) => ({id,title,date,suburb,costLabel})) };
       }
     }, { signal: lifecycle.signal })).catch(() => {});
