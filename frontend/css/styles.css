@@ -459,16 +459,6 @@ body.events-route .event-content h3 { margin-bottom: 6px; line-height: 1.25; }
 body.events-route .event-meta { line-height: 1.38; margin-bottom: 9px; }
 body.events-route .card-bottom { padding-top: 8px; gap: 10px; }
 body.events-route .card-bottom button { min-height: 34px; padding: 2px 0; }
-body.events-route .event-card .club-interest {
-  min-height: 0;
-  margin-top: 7px;
-  padding: 8px 0 0;
-}
-body.events-route .event-card .club-interest-copy { line-height: 1.25; }
-body.events-route .event-card .interest-pill {
-  min-height: 32px;
-  padding: 6px 11px;
-}
 @media (max-width: 760px) {
   body.events-route main { zoom: 1.06; max-width: none; }
   body.events-route .home-intro { padding-top: 20px; }
@@ -685,4 +675,39 @@ body.events-route .event-filter-panel .active-filter-list {
 @media (max-width: 380px) {
   body.events-route .event-filter-panel .event-more-filters { grid-template-columns: 1fr; }
   body.events-route .event-filter-panel .event-suburb-field { grid-column: auto; }
+}
+
+/* Family discovery refinements keep the existing card and filter layout. */
+body.events-route .event-filter-panel .event-suburb-field { grid-column: span 2; }
+.event-content .event-meta { display: grid; gap: 3px; line-height: 1.45; }
+.event-content .event-meta span { display: block; }
+.activity-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 11px 0 0; }
+.activity-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #edf4fd;
+  color: #26659f;
+  font-size: .7rem;
+  font-weight: 600;
+}
+.event-content .card-bottom { justify-content: space-between; flex-wrap: wrap; margin-top: 12px; }
+.card-booking-link { color: var(--blue); font-size: .8rem; font-weight: 650; line-height: 1.35; }
+.card-booking-link:hover { text-decoration: underline; }
+.booking-note { color: var(--muted); font-size: .75rem; line-height: 1.35; }
+.event-detail-image { display: block; width: 100%; max-height: 235px; object-fit: cover; border-radius: 14px; margin: 0 0 18px; }
+.event-detail-tags { margin: 0 0 20px; }
+.event-club-interest { margin-top: 24px; }
+.event-club-interest h3 { margin-bottom: 5px; }
+.event-club-interest > p { margin-bottom: 0; font-size: .86rem; }
+.event-club-interest .interest-summary { flex-wrap: wrap; }
+.event-detail-actions { flex-wrap: wrap; align-items: center; justify-content: flex-start; }
+.event-detail-actions .button { text-align: center; }
+@media (max-width: 760px) {
+  body.events-route .event-filter-panel .event-suburb-field { grid-column: 1 / -1; }
+}
+@media (max-width: 470px) {
+  .event-detail-actions .button { width: 100%; }
 }

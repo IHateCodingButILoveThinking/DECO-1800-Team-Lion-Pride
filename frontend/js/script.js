@@ -22,7 +22,6 @@ let loading = false;
 let eventSuburbs = [];
 let suburbsPending = false;
 let saved = [];
-let familyOnly = false;
 let eventFilters = emptyEventFilters();
 let eventDetailsOpen = false;
 let userLocation = null;
@@ -40,6 +39,8 @@ function emptyEventFilters() {
     category: 'All activities',
     suburb: 'All suburbs',
     date: 'all',
+    age: 'All ages',
+    tag: 'All types',
     quick: '',
     maxPrice: 100,
     near: false
@@ -199,6 +200,18 @@ function eventFilterControls() {
           ${options(categories, eventFilters.category)}
         </select>
       </label>
+      <label class="event-filter-field">
+        <span class="event-field-label">Child age</span>
+        <select id="event-age" aria-label="Child age range">
+          ${options(['All ages', '0–3 years', '4–7 years', '8–12 years', '13–17 years'], eventFilters.age)}
+        </select>
+      </label>
+      <label class="event-filter-field">
+        <span class="event-field-label">Activity tag</span>
+        <select id="event-tag" aria-label="Activity tag">
+          ${options(['All types', 'Outdoor', 'Creative', 'Sport', 'Nature', 'Music', 'Library', 'Indoor', 'Markets'], eventFilters.tag)}
+        </select>
+      </label>
       <label class="event-filter-field event-suburb-field">
         <span class="event-field-label">Suburb</span>
         <select id="event-suburb" aria-label="Suburb">
@@ -225,7 +238,6 @@ function eventFilterControls() {
             aria-label="Apply price filter">Apply</button>
         </div>
       </details>
-      <label class="family-filter"><input type="checkbox" id="family-only" ${familyOnly ? 'checked' : ''}> Family-friendly only</label>
     </div>
     ${route === 'events' ? '<button type="button" class="button primary event-filter-done" data-filter-close>Show results</button></div>' : ''}
     <div id="active-filter" role="group" aria-label="Active filters"></div>`;
@@ -312,10 +324,12 @@ function matchesEventDate(event, preference, dates) {
 function eventAgeMatches(event, childAges) {
   if (!childAges?.length) return true;
   const ageText = `${event.ages || ''} ${(event.ageRanges || []).join(' ')}`.toLowerCase();
-  if (!ageText || /all ages|famil|everyone|check age/.test(ageText)) return true;
+  if (/all ages|famil|everyone/.test(ageText)) return true;
+  if (!ageText || /check age suitability/.test(ageText)) return false;
   const ranges = [...ageText.matchAll(/(\d{1,2})\s*(?:-|–|—|to)\s*(\d{1,2})/g)]
     .map(match => [Number(match[1]), Number(match[2])]);
-  const minimums = [...ageText.matchAll(/(?:ages?|aged)\s*(\d{1,2})\s*\+/g)].map(match => Number(match[1]));
+  const minimums = [...ageText.matchAll(/(?:ages?|aged)\s*(\d{1,2})\s*\+|(\d{1,2})\s*(?:years?\s*)?(?:and over|\+)/g)]
+    .map(match => Number(match[1] || match[2]));
   const maximums = [...ageText.matchAll(/(?:under|up to)\s*(\d{1,2})/g)].map(match => Number(match[1]));
   const explicit = ranges.length || minimums.length || maximums.length;
   if (explicit) return childAges.some(age => ranges.some(([min, max]) => age >= min && age <= max) || minimums.some(min => age >= min) || maximums.some(max => age <= max));
@@ -326,6 +340,13 @@ function eventAgeMatches(event, childAges) {
     (age >= 13 && /teen|young people|youth/.test(ageText))
   ) || !/bab|toddler|preschool|child|kid|primary|teen|youth/.test(ageText);
 }
+
+const childAgeGroups = {
+  '0–3 years': [0, 1, 2, 3],
+  '4–7 years': [4, 5, 6, 7],
+  '8–12 years': [8, 9, 10, 11, 12],
+  '13–17 years': [13, 14, 15, 16, 17]
+};
 
 function eventMatchesSmartCriteria(event, dates) {
   if (!smartCriteria) return true;
@@ -355,6 +376,10 @@ function filteredEvents() {
       event.suburb.toLowerCase() === selectedSuburb;
     const matchesCategory = eventFilters.category === 'All activities' ||
       event.category === eventFilters.category;
+    const matchesAge = eventFilters.age === 'All ages' ||
+      eventAgeMatches(event, childAgeGroups[eventFilters.age]);
+    const matchesTag = eventFilters.tag === 'All types' ||
+      (event.tags || []).includes(eventFilters.tag);
     const matchesFree = eventFilters.quick !== 'free' || event.cost === 0;
     const price = eventPrice(event);
     const matchesPrice = eventFilters.maxPrice >= 100 ||
@@ -362,10 +387,12 @@ function filteredEvents() {
     const distance = eventDistance(event);
     const matchesNear = !eventFilters.near || (distance !== null && distance <= 10);
 
-    return (!familyOnly || event.family) &&
+    return event.family &&
       matchesDate &&
       matchesSuburb &&
       matchesCategory &&
+      matchesAge &&
+      matchesTag &&
       matchesFree &&
       matchesPrice &&
       matchesNear &&
@@ -384,12 +411,13 @@ function renderActiveFilters() {
   const filters = [];
   if (eventFilters.search.trim()) filters.push(['search', `Search: ${eventFilters.search.trim()}`]);
   if (eventFilters.category !== 'All activities') filters.push(['category', `Category: ${eventFilters.category}`]);
+  if (eventFilters.age !== 'All ages') filters.push(['age', `Age: ${eventFilters.age}`]);
+  if (eventFilters.tag !== 'All types') filters.push(['tag', `Activity: ${eventFilters.tag}`]);
   if (eventFilters.suburb !== 'All suburbs') filters.push(['suburb', `Suburb: ${eventFilters.suburb}`]);
   if (eventFilters.date !== 'all') filters.push(['date', `Date: ${dateFilterLabel(eventFilters.date)}`]);
   if (eventFilters.quick === 'free') filters.push(['quick', 'Free activities']);
   if (eventFilters.maxPrice < 100) filters.push(['maxPrice', `Up to $${eventFilters.maxPrice}`]);
   if (eventFilters.near) filters.push(['near', 'Within 10 km']);
-  if (familyOnly) filters.push(['family', 'Family-suitable']);
   if (smartCriteria) filters.push(['smart-all', 'AI recommendations']);
 
   const quickStates = {
@@ -424,11 +452,27 @@ function renderActiveFilters() {
       <button class="active-filter-clear" type="button" data-reset>Clear all</button>
     </div>` : '';
 }
+function bookingContact(event) {
+  if (event.bookingRequired === false) return { type: 'none' };
+  const url = /^(?:https?:\/\/|mailto:)/i.test(event.bookingUrl || '') ? event.bookingUrl : '';
+  if (url.startsWith('mailto:')) return { type: 'email', href: url };
+  if (url) return { type: 'website', href: url };
+  const phone = /^tel:\+?\d+$/i.test(event.bookingPhoneUrl || '') ? event.bookingPhoneUrl : '';
+  if (phone && event.bookingPhone) return { type: 'phone', href: phone, label: event.bookingPhone, canBook: event.bookingPhoneCanBook };
+  return { type: 'details' };
+}
 function eventCard(event) {
   const active = isSaved(event.id);
   const distance = eventDistance(event);
   const distanceLabel = eventFilters.near && distance !== null ? ` · ${distance.toFixed(1)} km away` : '';
-  return `<article class="event-card"><div class="event-visual">${event.image ? `<img src="${escapeHTML(event.image)}" alt="${escapeHTML(event.title)}" loading="lazy" referrerpolicy="no-referrer">` : `<span class="image-fallback">${icon(event.category === 'Libraries' ? 'book' : event.category === 'Outdoors' ? 'leaf' : 'calendar',38)}</span>`}<span class="price-label">${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free' : `$${event.cost}`))}</span><button class="save-button" data-save="${escapeHTML(event.id)}" aria-label="${active ? 'Unsave' : 'Save'} ${escapeHTML(event.title)}" aria-pressed="${active}">${active ? '♥' : '♡'}</button></div><div class="event-content"><p class="event-category">${escapeHTML(event.category)}</p><h3>${escapeHTML(event.title)}</h3><div class="event-meta">${escapeHTML(event.date || event.day)} · ${escapeHTML(event.suburb)}${escapeHTML(distanceLabel)}<br>${escapeHTML(event.venue)}</div><div class="card-bottom"><span>${escapeHTML(event.ages)}</span><button data-event="${escapeHTML(event.id)}">View activity ↗</button></div>${Social.eventInterestCard(event.id)}</div></article>`;
+  const tags = (event.tags || []).slice(0, 2).map(tag => `<span class="activity-tag">${escapeHTML(tag)}</span>`).join('');
+  const contact = bookingContact(event);
+  const bookingAction = contact.type === 'none'
+    ? '<span class="booking-note">No booking needed</span>'
+    : contact.type === 'details'
+      ? `<button class="card-booking-link" data-event="${escapeHTML(event.id)}">${event.bookingRequired === true ? 'Booking details' : 'Check booking details'}</button>`
+      : `<a class="card-booking-link" href="${escapeHTML(contact.href)}" ${contact.type === 'website' ? 'target="_blank" rel="noopener noreferrer"' : ''}>${contact.type === 'email' ? 'Email to book' : contact.type === 'phone' ? `Call ${escapeHTML(contact.label)} ${contact.canBook ? 'to book' : 'for details'}` : 'Book / sign up'} ↗</a>`;
+  return `<article class="event-card"><div class="event-visual">${event.image ? `<img src="${escapeHTML(event.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="image-fallback">${icon(event.category === 'Libraries' ? 'book' : event.category === 'Outdoors' ? 'leaf' : 'calendar',38)}</span>`}<span class="price-label">${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free' : 'Check cost'))}</span><button class="save-button" data-save="${escapeHTML(event.id)}" aria-label="${active ? 'Unsave' : 'Save'} ${escapeHTML(event.title)}" aria-pressed="${active}">${active ? '♥' : '♡'}</button></div><div class="event-content"><h3>${escapeHTML(event.title)}</h3><div class="event-meta"><span>${escapeHTML(event.date || event.day)} · ${escapeHTML(event.timeLabel || event.time || '')}</span><span>${escapeHTML(event.suburb)}${escapeHTML(distanceLabel)}</span><span>${escapeHTML(event.ages)}</span></div>${tags ? `<div class="activity-tags" aria-label="Activity tags">${tags}</div>` : ''}<div class="card-bottom">${bookingAction}<button data-event="${escapeHTML(event.id)}">View details ↗</button></div></div></article>`;
 }
 function renderEventResults() {
   if (!document.querySelector('#event-results')) return;
@@ -459,7 +503,16 @@ function showDialog(html) { content.innerHTML = html; modal.removeAttribute('dat
 function showEvent(id) {
   const event = findEvent(id);
   if (!event) return;
-  showDialog(`<div class="eyebrow">COUNCIL ACTIVITY</div><h2 id="modal-title">${escapeHTML(event.title)}</h2><p>${escapeHTML(event.description)}</p><dl class="detail-list"><dt>When</dt><dd>${escapeHTML(event.time)}</dd><dt>Where</dt><dd>${escapeHTML(event.venue)}</dd><dt>Cost</dt><dd>${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free entry' : `$${event.cost} per participant`))}</dd><dt>Suitable for</dt><dd>${escapeHTML(event.ages)}</dd>${event.bookings ? `<dt>Bookings</dt><dd>${escapeHTML(event.bookings)}</dd>` : ''}${event.requirements ? `<dt>Bring along</dt><dd>${escapeHTML(event.requirements)}</dd>` : ''}</dl><p class="subtle">Check the council listing for current availability, cancellations and booking requirements.</p>${Social.eventInterestDetail(event.id)}<div class="form-actions"><button class="button" data-share-event="${escapeHTML(event.id)}">Share with a club</button>${event.live && /^https:\/\//i.test(event.url || '') ? `<a class="button primary" href="${escapeHTML(event.url)}" target="_blank" rel="noopener noreferrer">Council listing ↗</a>` : '<a class="button" href="#events" data-close>Browse live events</a>'}</div>`);
+  const tags = (event.tags || []).map(tag => `<span class="activity-tag">${escapeHTML(tag)}</span>`).join('');
+  const contact = bookingContact(event);
+  const sourceUrl = event.live && /^https:\/\//i.test(event.url || '') ? event.url : '';
+  const bookingAction = contact.href
+    ? `<a class="button primary" href="${escapeHTML(contact.href)}" ${contact.type === 'website' ? 'target="_blank" rel="noopener noreferrer"' : ''}>${contact.type === 'email' ? 'Email to book' : contact.type === 'phone' ? `Call ${escapeHTML(contact.label)} ${contact.canBook ? 'to book' : 'for details'}` : 'Book or sign up'} ↗</a>`
+    : '';
+  const sourceAction = sourceUrl
+    ? `<a class="button" href="${escapeHTML(sourceUrl)}" target="_blank" rel="noopener noreferrer">Council event listing ↗</a>`
+    : '';
+  showDialog(`<div class="eyebrow">FAMILY ACTIVITY</div><h2 id="modal-title">${escapeHTML(event.title)}</h2>${event.image ? `<img class="event-detail-image" src="${escapeHTML(event.image)}" alt="" referrerpolicy="no-referrer">` : ''}${tags ? `<div class="activity-tags event-detail-tags" aria-label="Activity tags">${tags}</div>` : ''}<dl class="detail-list"><dt>Date & time</dt><dd>${escapeHTML(event.time || event.date || 'Check date and time')}</dd><dt>Location</dt><dd>${escapeHTML(event.venue)}${event.address ? `<br>${escapeHTML(event.address)}` : ''}</dd><dt>Cost</dt><dd>${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free entry' : 'Check cost'))}</dd><dt>Suitable for</dt><dd>${escapeHTML(event.ages || 'Check age suitability')}</dd><dt>Bookings</dt><dd>${escapeHTML(event.bookings || (event.bookingRequired === false ? 'No booking needed.' : 'The Council feed does not provide booking instructions for this event.'))}</dd>${event.requirements ? `<dt>Bring along</dt><dd>${escapeHTML(event.requirements)}</dd>` : ''}</dl><h3>About this activity</h3><p>${escapeHTML(event.description || 'No further description is available.')}</p><p class="subtle">Details can change. Check the Council listing before you go, especially for bookings or cancellations.</p>${Social.eventInterestDetail(event.id)}<div class="form-actions event-detail-actions">${bookingAction}${sourceAction}<button class="button" data-share-event="${escapeHTML(event.id)}">Share with a club</button></div>`);
   modal.dataset.eventId=id;
 }
 
@@ -493,9 +546,7 @@ function enableNearMe(button) {
 
 // Removing a chip changes only its own filter and keeps the other selections.
 function removeEventFilter(filter) {
-  if (filter === 'family') {
-    familyOnly = false;
-  } else if (filter === 'smart-all' && smartCriteria) {
+  if (filter === 'smart-all' && smartCriteria) {
     smartCriteria = null;
   } else if (Object.prototype.hasOwnProperty.call(eventFilters, filter)) {
     eventFilters[filter] = emptyEventFilters()[filter];
@@ -511,7 +562,6 @@ function removeEventFilter(filter) {
 function clearEventFilters() {
   eventFilters = emptyEventFilters();
   userLocation = null;
-  familyOnly = false;
   smartCriteria = null;
   eventChatMessages = [{role: 'assistant', content: EVENT_CHAT_WELCOME}];
   visibleLimit = 12;
@@ -681,9 +731,10 @@ document.addEventListener('input', event => {
 // Filter changes preserve all other active filters.
 document.addEventListener('change', event => {
   const field = event.target;
-  if (field.id === 'family-only') familyOnly = field.checked;
-  else if (field.id === 'event-date') eventFilters.date = field.value || 'all';
+  if (field.id === 'event-date') eventFilters.date = field.value || 'all';
   else if (field.id === 'event-category') eventFilters.category = field.value;
+  else if (field.id === 'event-age') eventFilters.age = field.value;
+  else if (field.id === 'event-tag') eventFilters.tag = field.value;
   else if (field.id === 'event-suburb') eventFilters.suburb = field.value;
   else if (field.name === 'price-mode') {
     const range = document.querySelector('#event-price-range');
@@ -710,17 +761,17 @@ function eventRequestFilters() {
     return /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? {start: value, end: value} : null;
   }).filter(Boolean);
   return {
-    search: eventFilters.search.trim(), category: eventFilters.category, dateRanges,
+    search: eventFilters.search.trim(), category: eventFilters.category, tag: eventFilters.tag, dateRanges,
     suburbs: [eventFilters.suburb === 'All suburbs' ? '' : eventFilters.suburb, smartCriteria?.suburb].filter(Boolean),
     freeOnly: eventFilters.quick === 'free' || smartCriteria?.freeOnly,
-    familyOnly, petFriendly: smartCriteria?.petFriendly, accessibility: smartCriteria?.accessibility
+    familyOnly: true, petFriendly: smartCriteria?.petFriendly, accessibility: smartCriteria?.accessibility
   };
 }
 
 // Cancel superseded searches; rerendering or changing routes reuses the current query.
 function ensureEventSearch(delay = 0) {
   if (!['home', 'events'].includes(route)) return Promise.resolve();
-  const key = JSON.stringify([eventFilters, familyOnly, smartCriteria, userLocation]);
+  const key = JSON.stringify([eventFilters, smartCriteria, userLocation]);
   if (key === feedQueryKey) return feedPromise || Promise.resolve();
   feedQueryKey = key;
   feedVersion += 1;
