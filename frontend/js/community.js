@@ -90,15 +90,10 @@ const Social = (() => {
     return `<strong>${e(people)}</strong> from ${e(clubName)} ${entry.count===1?'is':'are'} interested`;
   }
   function interestAvatars(entry){return entry?.people?.length?`<span class="interest-avatars">${entry.people.map(person=>`<span class="interest-avatar" title="${e(person.name)}">${e(initials(person.name))}</span>`).join('')}</span>`:'';}
-  function eventInterestCard(id){
-    if(!profile())return `<div class="club-interest"><span class="club-interest-copy">See when families from your clubs want to go.</span><button class="interest-pill" data-event-interest="${e(id)}">Join event</button></div>`;
-    const entry=interestByEvent[id]||{interested:false,people:[],count:0,clubs:[]};
-    return `<div class="club-interest">${interestAvatars(entry)}${entry.count?`<span class="club-interest-copy">${interestCopy(entry)}</span>`:''}<button class="interest-pill ${entry.interested?'active':''}" data-event-interest="${e(id)}" aria-pressed="${entry.interested}">${entry.interested?`${icon('check',13)} Interested`:'I’m interested'}</button></div>`;
-  }
   function eventInterestDetail(id){
-    if(!profile())return `<div class="interest-summary"><span class="empty-icon no-margin">${icon('people',25)}</span><p class="no-margin subtle">Log in to show interest and see when people from your clubs want to join.</p></div>`;
+    if(!profile())return '';
     const entry=interestByEvent[id]||{interested:false,people:[],count:0,clubs:[]};
-    return `<div class="interest-summary"><div class="club-interest">${interestAvatars(entry)}<span class="club-interest-copy">${entry.count?interestCopy(entry):'Be the first person from your clubs to show interest.'}</span></div><button class="button ${entry.interested?'soft':'primary'}" data-event-interest="${e(id)}" aria-pressed="${entry.interested}">${entry.interested?`${icon('check',15)} Interested`:'I’m interested'}</button></div>`;
+    return `<section class="event-club-interest"><h3>Share interest with your clubs</h3><p class="subtle">Let people in your Family Finds clubs know you may go. This does not reserve a place; use the booking option if one is required.</p><div class="interest-summary"><div class="club-interest">${interestAvatars(entry)}<span class="club-interest-copy">${entry.count?interestCopy(entry):entry.interested?'You’ve shared your interest with your clubs.':'No one from your clubs has shown interest yet.'}</span></div><button class="button ${entry.interested?'soft':'primary'}" data-event-interest="${e(id)}" aria-pressed="${entry.interested}">${entry.interested?`${icon('check',15)} Remove interest`:'Tell my clubs I’m interested'}</button></div></section>`;
   }
   async function toggleEventInterest(id){
     if(!requireProfile())return;
@@ -203,5 +198,5 @@ const Social = (() => {
       if(form.id==='club-reply-form'){await api(`/posts/${form.dataset.id}/replies`,{method:'POST',body:JSON.stringify(b)});notify('Your reply is posted.');render();}
     }catch(error){feedback.innerHTML=`<p class="inline-error">${e(error.message)}</p>`;}finally{button.disabled=false;}
   });
-  return {init,handles,show,profile,requireProfile,api,compose,eventInterestCard,eventInterestDetail,toggleEventInterest,refreshEventInterest};
+  return {init,handles,show,profile,requireProfile,api,compose,eventInterestDetail,toggleEventInterest,refreshEventInterest};
 })();

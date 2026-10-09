@@ -159,6 +159,30 @@ Home links use `index.html` with no `#home` suffix. Inner views use hashes so Ev
 - Optional Facebook or Messenger links for individual clubs.
 - Event cards that can show when members of the same club are interested.
 
+### Week 9 discovery refinements
+
+The event feed starts with family-relevant Council listings. This follows the
+Week 9 feedback that parents should not need to enable a family checkbox before
+they can browse. The Council's age fields and family wording in titles determine
+relevance, so some suitable events with missing age information may be absent.
+
+Parents can narrow results by child age range, cost, date, suburb or distance,
+category, and activity tag. Tags such as Music, Sport, Nature, and Indoor are
+derived from the event title, venue, type, and description. They are keyword
+matches, so they are browsing aids rather than verified event attributes.
+Search also expands an exact tag name to related words; for example, searching
+for “Music” includes “concert” and “choir”.
+
+Cards show the information needed for quick comparison: title, cost, age,
+date/time, suburb, up to two tags, and the available booking method. A booking
+website, email address, or phone number from the Council feed becomes a direct
+action on the card. If the feed has no clear booking contact, the card opens
+the in-app details instead of using the general Council page as a booking link.
+The modal keeps the full description, venue address, booking instructions, and
+requirements in the same browsing context. The Council listing remains a
+separate verification link. The club interest feature appears only in the
+details for signed-in members and explicitly does not reserve a place.
+
 ## Team task allocation
 
 The project has four contributors: the Community owner and three teammates. Each area has one main owner so the team can work in parallel with fewer merge conflicts.

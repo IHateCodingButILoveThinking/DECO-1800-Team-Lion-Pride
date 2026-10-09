@@ -11,8 +11,17 @@ let route = 'home';
 let events = [];
 let feedState = 'loading';
 let feedTotal = 0;
+let feedOffset = 0;
+let feedHasMore = false;
+let feedQueryKey = '';
+let feedVersion = 0;
+let feedController;
+let feedTimer;
+let feedPromise;
+let loading = false;
+let eventSuburbs = [];
+let suburbsPending = false;
 let saved = [];
-let familyOnly = true;
 let eventFilters = emptyEventFilters();
 let eventDetailsOpen = false;
 let userLocation = null;
@@ -30,6 +39,8 @@ function emptyEventFilters() {
     category: 'All activities',
     suburb: 'All suburbs',
     date: 'all',
+    age: 'All ages',
+    tag: 'All types',
     quick: '',
     maxPrice: 100,
     near: false
@@ -88,6 +99,8 @@ function render() {
   document.body.classList.toggle('event-filters-expanded', route === 'events' && eventDetailsOpen);
   if (Social.handles(route)) { Social.show(route); updateCount(); return; }
   main.innerHTML = activitiesPage();
+  ensureEventSearch();
+  if (route === 'home' || (route === 'events' && (eventDetailsOpen || matchMedia('(min-width: 761px)').matches))) ensureSuburbOptions();
   renderEventResults();
   updateCount();
 }
@@ -95,7 +108,7 @@ function options(values, selected) { return values.map(value => `<option ${value
 
 // Build the suburb list from live events, without prioritising any location.
 function suburbOptions() {
-  const suburbs = [...new Set(events.map(event => event.suburb).filter(Boolean))]
+  const suburbs = [...new Set([...eventSuburbs, ...events.map(event => event.suburb), eventFilters.suburb === 'All suburbs' ? '' : eventFilters.suburb].filter(Boolean))]
     .sort((a, b) => a.localeCompare(b));
   return ['All suburbs', ...suburbs];
 }
@@ -187,6 +200,18 @@ function eventFilterControls() {
           ${options(categories, eventFilters.category)}
         </select>
       </label>
+      <label class="event-filter-field">
+        <span class="event-field-label">Child age</span>
+        <select id="event-age" aria-label="Child age range">
+          ${options(['All ages', '0–3 years', '4–7 years', '8–12 years', '13–17 years'], eventFilters.age)}
+        </select>
+      </label>
+      <label class="event-filter-field">
+        <span class="event-field-label">Activity tag</span>
+        <select id="event-tag" aria-label="Activity tag">
+          ${options(['All types', 'Outdoor', 'Creative', 'Sport', 'Nature', 'Music', 'Library', 'Indoor', 'Markets'], eventFilters.tag)}
+        </select>
+      </label>
       <label class="event-filter-field event-suburb-field">
         <span class="event-field-label">Suburb</span>
         <select id="event-suburb" aria-label="Suburb">
@@ -213,7 +238,6 @@ function eventFilterControls() {
             aria-label="Apply price filter">Apply</button>
         </div>
       </details>
-      <label class="family-filter"><input type="checkbox" id="family-only" ${familyOnly ? 'checked' : ''}> Family-friendly only</label>
     </div>
     ${route === 'events' ? '<button type="button" class="button primary event-filter-done" data-filter-close>Show results</button></div>' : ''}
     <div id="active-filter" role="group" aria-label="Active filters"></div>`;
@@ -226,6 +250,7 @@ function setEventDetailsOpen(open) {
   const toggle = document.querySelector('[data-filter-toggle]');
   toggle?.setAttribute('aria-expanded', String(open));
   document.querySelector('#event-filter-details')?.classList.toggle('is-open', open);
+  if (open) ensureSuburbOptions();
   if (!open) toggle?.focus();
 }
 
@@ -299,10 +324,12 @@ function matchesEventDate(event, preference, dates) {
 function eventAgeMatches(event, childAges) {
   if (!childAges?.length) return true;
   const ageText = `${event.ages || ''} ${(event.ageRanges || []).join(' ')}`.toLowerCase();
-  if (!ageText || /all ages|famil|everyone|check age/.test(ageText)) return true;
+  if (/all ages|famil|everyone/.test(ageText)) return true;
+  if (!ageText || /check age suitability/.test(ageText)) return false;
   const ranges = [...ageText.matchAll(/(\d{1,2})\s*(?:-|–|—|to)\s*(\d{1,2})/g)]
     .map(match => [Number(match[1]), Number(match[2])]);
-  const minimums = [...ageText.matchAll(/(?:ages?|aged)\s*(\d{1,2})\s*\+/g)].map(match => Number(match[1]));
+  const minimums = [...ageText.matchAll(/(?:ages?|aged)\s*(\d{1,2})\s*\+|(\d{1,2})\s*(?:years?\s*)?(?:and over|\+)/g)]
+    .map(match => Number(match[1] || match[2]));
   const maximums = [...ageText.matchAll(/(?:under|up to)\s*(\d{1,2})/g)].map(match => Number(match[1]));
   const explicit = ranges.length || minimums.length || maximums.length;
   if (explicit) return childAges.some(age => ranges.some(([min, max]) => age >= min && age <= max) || minimums.some(min => age >= min) || maximums.some(max => age <= max));
@@ -313,6 +340,13 @@ function eventAgeMatches(event, childAges) {
     (age >= 13 && /teen|young people|youth/.test(ageText))
   ) || !/bab|toddler|preschool|child|kid|primary|teen|youth/.test(ageText);
 }
+
+const childAgeGroups = {
+  '0–3 years': [0, 1, 2, 3],
+  '4–7 years': [4, 5, 6, 7],
+  '8–12 years': [8, 9, 10, 11, 12],
+  '13–17 years': [13, 14, 15, 16, 17]
+};
 
 function eventMatchesSmartCriteria(event, dates) {
   if (!smartCriteria) return true;
@@ -334,22 +368,18 @@ function eventMatchesSmartCriteria(event, dates) {
 // Event filter matching uses Brisbane calendar dates, so "Next 7 days" includes today.
 function filteredEvents() {
   const dates = dateContext();
-  const query = eventFilters.search.toLowerCase().trim();
   const selectedSuburb = eventFilters.suburb.toLowerCase();
 
   const matches = events.filter(event => {
-    const searchableText = [
-      event.title,
-      event.venue,
-      event.suburb,
-      event.category,
-      event.description
-    ].join(' ').toLowerCase();
     const matchesDate = matchesEventDate(event, eventFilters.date, dates);
     const matchesSuburb = eventFilters.suburb === 'All suburbs' ||
       event.suburb.toLowerCase() === selectedSuburb;
     const matchesCategory = eventFilters.category === 'All activities' ||
       event.category === eventFilters.category;
+    const matchesAge = eventFilters.age === 'All ages' ||
+      eventAgeMatches(event, childAgeGroups[eventFilters.age]);
+    const matchesTag = eventFilters.tag === 'All types' ||
+      (event.tags || []).includes(eventFilters.tag);
     const matchesFree = eventFilters.quick !== 'free' || event.cost === 0;
     const price = eventPrice(event);
     const matchesPrice = eventFilters.maxPrice >= 100 ||
@@ -357,12 +387,15 @@ function filteredEvents() {
     const distance = eventDistance(event);
     const matchesNear = !eventFilters.near || (distance !== null && distance <= 10);
 
-    return (!familyOnly || event.family) &&
-      searchableText.includes(query) &&
+    return event.family &&
       matchesDate &&
       matchesSuburb &&
       matchesCategory &&
+      matchesAge &&
+      matchesTag &&
       matchesFree &&
+      matchesPrice &&
+      matchesNear &&
       eventMatchesSmartCriteria(event, dates);
   });
   return eventFilters.near
@@ -378,12 +411,13 @@ function renderActiveFilters() {
   const filters = [];
   if (eventFilters.search.trim()) filters.push(['search', `Search: ${eventFilters.search.trim()}`]);
   if (eventFilters.category !== 'All activities') filters.push(['category', `Category: ${eventFilters.category}`]);
+  if (eventFilters.age !== 'All ages') filters.push(['age', `Age: ${eventFilters.age}`]);
+  if (eventFilters.tag !== 'All types') filters.push(['tag', `Activity: ${eventFilters.tag}`]);
   if (eventFilters.suburb !== 'All suburbs') filters.push(['suburb', `Suburb: ${eventFilters.suburb}`]);
   if (eventFilters.date !== 'all') filters.push(['date', `Date: ${dateFilterLabel(eventFilters.date)}`]);
   if (eventFilters.quick === 'free') filters.push(['quick', 'Free activities']);
   if (eventFilters.maxPrice < 100) filters.push(['maxPrice', `Up to $${eventFilters.maxPrice}`]);
   if (eventFilters.near) filters.push(['near', 'Within 10 km']);
-  if (familyOnly) filters.push(['family', 'Family-suitable']);
   if (smartCriteria) filters.push(['smart-all', 'AI recommendations']);
 
   const quickStates = {
@@ -418,11 +452,27 @@ function renderActiveFilters() {
       <button class="active-filter-clear" type="button" data-reset>Clear all</button>
     </div>` : '';
 }
+function bookingContact(event) {
+  if (event.bookingRequired === false) return { type: 'none' };
+  const url = /^(?:https?:\/\/|mailto:)/i.test(event.bookingUrl || '') ? event.bookingUrl : '';
+  if (url.startsWith('mailto:')) return { type: 'email', href: url };
+  if (url) return { type: 'website', href: url };
+  const phone = /^tel:\+?\d+$/i.test(event.bookingPhoneUrl || '') ? event.bookingPhoneUrl : '';
+  if (phone && event.bookingPhone) return { type: 'phone', href: phone, label: event.bookingPhone, canBook: event.bookingPhoneCanBook };
+  return { type: 'details' };
+}
 function eventCard(event) {
   const active = isSaved(event.id);
   const distance = eventDistance(event);
   const distanceLabel = eventFilters.near && distance !== null ? ` · ${distance.toFixed(1)} km away` : '';
-  return `<article class="event-card"><div class="event-visual">${event.image ? `<img src="${escapeHTML(event.image)}" alt="${escapeHTML(event.title)}" loading="lazy" referrerpolicy="no-referrer">` : `<span class="image-fallback">${icon(event.category === 'Libraries' ? 'book' : event.category === 'Outdoors' ? 'leaf' : 'calendar',38)}</span>`}<span class="price-label">${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free' : `$${event.cost}`))}</span><button class="save-button" data-save="${escapeHTML(event.id)}" aria-label="${active ? 'Unsave' : 'Save'} ${escapeHTML(event.title)}" aria-pressed="${active}">${active ? '♥' : '♡'}</button></div><div class="event-content"><p class="event-category">${escapeHTML(event.category)}</p><h3>${escapeHTML(event.title)}</h3><div class="event-meta">${escapeHTML(event.date || event.day)} · ${escapeHTML(event.suburb)}${escapeHTML(distanceLabel)}<br>${escapeHTML(event.venue)}</div><div class="card-bottom"><span>${escapeHTML(event.ages)}</span><button data-event="${escapeHTML(event.id)}">View activity ↗</button></div>${Social.eventInterestCard(event.id)}</div></article>`;
+  const tags = (event.tags || []).slice(0, 2).map(tag => `<span class="activity-tag">${escapeHTML(tag)}</span>`).join('');
+  const contact = bookingContact(event);
+  const bookingAction = contact.type === 'none'
+    ? '<span class="booking-note">No booking needed</span>'
+    : contact.type === 'details'
+      ? `<button class="card-booking-link" data-event="${escapeHTML(event.id)}">${event.bookingRequired === true ? 'Booking details' : 'Check booking details'}</button>`
+      : `<a class="card-booking-link" href="${escapeHTML(contact.href)}" ${contact.type === 'website' ? 'target="_blank" rel="noopener noreferrer"' : ''}>${contact.type === 'email' ? 'Email to book' : contact.type === 'phone' ? `Call ${escapeHTML(contact.label)} ${contact.canBook ? 'to book' : 'for details'}` : 'Book / sign up'} ↗</a>`;
+  return `<article class="event-card"><div class="event-visual">${event.image ? `<img src="${escapeHTML(event.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="image-fallback">${icon(event.category === 'Libraries' ? 'book' : event.category === 'Outdoors' ? 'leaf' : 'calendar',38)}</span>`}<span class="price-label">${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free' : 'Check cost'))}</span><button class="save-button" data-save="${escapeHTML(event.id)}" aria-label="${active ? 'Unsave' : 'Save'} ${escapeHTML(event.title)}" aria-pressed="${active}">${active ? '♥' : '♡'}</button></div><div class="event-content"><h3>${escapeHTML(event.title)}</h3><div class="event-meta"><span>${escapeHTML(event.date || event.day)} · ${escapeHTML(event.timeLabel || event.time || '')}</span><span>${escapeHTML(event.suburb)}${escapeHTML(distanceLabel)}</span><span>${escapeHTML(event.ages)}</span></div>${tags ? `<div class="activity-tags" aria-label="Activity tags">${tags}</div>` : ''}<div class="card-bottom">${bookingAction}<button data-event="${escapeHTML(event.id)}">View details ↗</button></div></div></article>`;
 }
 function renderEventResults() {
   if (!document.querySelector('#event-results')) return;
@@ -431,27 +481,38 @@ function renderEventResults() {
   if (hero && heroEvent && hero.dataset.event !== heroEvent.id) { hero.dataset.event = heroEvent.id; hero.innerHTML = `<img src="${escapeHTML(heroEvent.image)}" alt="${escapeHTML(heroEvent.title)}" referrerpolicy="no-referrer"><div class="hero-caption"><strong>${escapeHTML(heroEvent.title)}</strong>${escapeHTML(heroEvent.suburb)} · ${escapeHTML(heroEvent.costLabel)}</div>`; }
   const list = route === 'saved' ? saved : filteredEvents();
   const limit = route === 'home' ? 6 : visibleLimit;
-  document.querySelector('#event-results').innerHTML = list.length ? list.slice(0, limit).map(eventCard).join('') : `<div class="empty-state"><h3>${route === 'saved' ? 'Your next family day starts here.' : feedState === 'loading' ? 'Finding activities around Brisbane…' : feedState === 'error' ? 'Council events are unavailable right now.' : 'No activities match just yet.'}</h3><p>${route === 'saved' ? (Social.profile() ? 'Tap the heart on an activity to keep it here.' : 'Log in to save activities and find them on any device.') : feedState === 'loading' ? 'Loading the latest published council listings.' : feedState === 'error' ? 'Please try again in a moment. We haven’t replaced live results with sample events.' : 'Try another suburb, category or search.'}</p>${route === 'saved' ? `<a class="button" href="${Social.profile() ? '#events' : '#login'}">${Social.profile() ? 'Explore activities' : 'Log in to save activities'}</a>` : feedState === 'error' ? '<button class="button" data-retry>Try again</button>' : feedState !== 'loading' ? '<button class="button" data-reset>Clear filters</button>' : ''}</div>`;
-  // Show the filtered match count separately from the live feed loading state.
-  const feedSummary = feedState === 'loading'
-    ? `Loading council listings (${events.length}${feedTotal ? ` of ${feedTotal}` : ''})…`
-    : feedState === 'error'
-      ? `Live feed interrupted; ${events.length} listings loaded.`
-      : `${events.length} live council activities`;
+  document.querySelector('#event-results').innerHTML = list.length ? list.slice(0, limit).map(eventCard).join('') : `<div class="empty-state"><h3>${route === 'saved' ? 'Your next family day starts here.' : feedState === 'loading' ? 'Finding activities around Brisbane…' : feedState === 'error' ? 'Council events are unavailable right now.' : feedHasMore ? 'No matches in this batch.' : 'No activities match just yet.'}</h3><p>${route === 'saved' ? (Social.profile() ? 'Tap the heart on an activity to keep it here.' : 'Log in to save activities and find them on any device.') : feedState === 'loading' ? 'Looking for activities that match your choices.' : feedState === 'error' ? 'Please try again in a moment.' : feedHasMore ? 'Load more to check further activities, or change your filters.' : 'Try another suburb, category or search.'}</p>${route === 'saved' ? `<a class="button" href="${Social.profile() ? '#events' : '#login'}">${Social.profile() ? 'Explore activities' : 'Log in to save activities'}</a>` : feedState === 'error' ? '<button class="button" data-retry>Try again</button>' : feedState !== 'loading' && !feedHasMore ? '<button class="button" data-reset>Clear filters</button>' : ''}</div>`;
+  const hasMore = list.length > limit || feedHasMore;
+  const shown = Math.min(list.length, limit);
+  const feedSummary = feedState === 'loading' ? 'Loading activities…'
+    : feedState === 'error' ? 'Couldn’t finish loading.'
+    : `${shown} ${shown === 1 ? 'activity' : 'activities'}${hasMore ? ' · more available' : ''}`;
   const status = route === 'saved'
     ? `${list.length} saved ${list.length === 1 ? 'activity' : 'activities'}`
-    : `${list.length} matches · ${feedSummary}`;
+    : feedSummary;
   document.querySelector('#feed-status').textContent = status;
   if (feedState === 'error' && events.length && route !== 'saved') document.querySelector('#feed-status').insertAdjacentHTML('beforeend',' <button class="button small" data-retry>Retry</button>');
   const more = document.querySelector('#load-more');
-  more.innerHTML = route !== 'home' && list.length > limit ? `<button class="button" data-more>Show more activities (${list.length - limit} remaining)</button>` : '';
+  more.innerHTML = route === 'saved'
+    ? (list.length > limit ? '<button class="button" data-more>Show more activities</button>' : '')
+    : route !== 'home' && hasMore && feedState !== 'error'
+      ? `<button class="button" data-more ${loading ? 'disabled' : ''}>${loading ? 'Loading…' : 'Load more activities'}</button>` : '';
   renderActiveFilters();
 }
 function showDialog(html) { content.innerHTML = html; modal.removeAttribute('data-event-id'); if (!modal.open) modal.showModal(); }
 function showEvent(id) {
   const event = findEvent(id);
   if (!event) return;
-  showDialog(`<div class="eyebrow">COUNCIL ACTIVITY</div><h2 id="modal-title">${escapeHTML(event.title)}</h2><p>${escapeHTML(event.description)}</p><dl class="detail-list"><dt>When</dt><dd>${escapeHTML(event.time)}</dd><dt>Where</dt><dd>${escapeHTML(event.venue)}</dd><dt>Cost</dt><dd>${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free entry' : `$${event.cost} per participant`))}</dd><dt>Suitable for</dt><dd>${escapeHTML(event.ages)}</dd>${event.bookings ? `<dt>Bookings</dt><dd>${escapeHTML(event.bookings)}</dd>` : ''}${event.requirements ? `<dt>Bring along</dt><dd>${escapeHTML(event.requirements)}</dd>` : ''}</dl><p class="subtle">Check the council listing for current availability, cancellations and booking requirements.</p>${Social.eventInterestDetail(event.id)}<div class="form-actions"><button class="button" data-share-event="${escapeHTML(event.id)}">Share with a club</button>${event.live && /^https:\/\//i.test(event.url || '') ? `<a class="button primary" href="${escapeHTML(event.url)}" target="_blank" rel="noopener noreferrer">Council listing ↗</a>` : '<a class="button" href="#events" data-close>Browse live events</a>'}</div>`);
+  const tags = (event.tags || []).map(tag => `<span class="activity-tag">${escapeHTML(tag)}</span>`).join('');
+  const contact = bookingContact(event);
+  const sourceUrl = event.live && /^https:\/\//i.test(event.url || '') ? event.url : '';
+  const bookingAction = contact.href
+    ? `<a class="button primary" href="${escapeHTML(contact.href)}" ${contact.type === 'website' ? 'target="_blank" rel="noopener noreferrer"' : ''}>${contact.type === 'email' ? 'Email to book' : contact.type === 'phone' ? `Call ${escapeHTML(contact.label)} ${contact.canBook ? 'to book' : 'for details'}` : 'Book or sign up'} ↗</a>`
+    : '';
+  const sourceAction = sourceUrl
+    ? `<a class="button" href="${escapeHTML(sourceUrl)}" target="_blank" rel="noopener noreferrer">Council event listing ↗</a>`
+    : '';
+  showDialog(`<div class="eyebrow">FAMILY ACTIVITY</div><h2 id="modal-title">${escapeHTML(event.title)}</h2>${event.image ? `<img class="event-detail-image" src="${escapeHTML(event.image)}" alt="" referrerpolicy="no-referrer">` : ''}${tags ? `<div class="activity-tags event-detail-tags" aria-label="Activity tags">${tags}</div>` : ''}<dl class="detail-list"><dt>Date & time</dt><dd>${escapeHTML(event.time || event.date || 'Check date and time')}</dd><dt>Location</dt><dd>${escapeHTML(event.venue)}${event.address ? `<br>${escapeHTML(event.address)}` : ''}</dd><dt>Cost</dt><dd>${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free entry' : 'Check cost'))}</dd><dt>Suitable for</dt><dd>${escapeHTML(event.ages || 'Check age suitability')}</dd><dt>Bookings</dt><dd>${escapeHTML(event.bookings || (event.bookingRequired === false ? 'No booking needed.' : 'The Council feed does not provide booking instructions for this event.'))}</dd>${event.requirements ? `<dt>Bring along</dt><dd>${escapeHTML(event.requirements)}</dd>` : ''}</dl><h3>About this activity</h3><p>${escapeHTML(event.description || 'No further description is available.')}</p><p class="subtle">Details can change. Check the Council listing before you go, especially for bookings or cancellations.</p>${Social.eventInterestDetail(event.id)}<div class="form-actions event-detail-actions">${bookingAction}${sourceAction}<button class="button" data-share-event="${escapeHTML(event.id)}">Share with a club</button></div>`);
   modal.dataset.eventId=id;
 }
 
@@ -485,9 +546,7 @@ function enableNearMe(button) {
 
 // Removing a chip changes only its own filter and keeps the other selections.
 function removeEventFilter(filter) {
-  if (filter === 'family') {
-    familyOnly = false;
-  } else if (filter === 'smart-all' && smartCriteria) {
+  if (filter === 'smart-all' && smartCriteria) {
     smartCriteria = null;
   } else if (Object.prototype.hasOwnProperty.call(eventFilters, filter)) {
     eventFilters[filter] = emptyEventFilters()[filter];
@@ -499,11 +558,10 @@ function removeEventFilter(filter) {
   render();
 }
 
-// "Clear all" also turns off the default family-suitable checkbox.
+// Start over with every filter off.
 function clearEventFilters() {
   eventFilters = emptyEventFilters();
   userLocation = null;
-  familyOnly = false;
   smartCriteria = null;
   eventChatMessages = [{role: 'assistant', content: EVENT_CHAT_WELCOME}];
   visibleLimit = 12;
@@ -533,10 +591,10 @@ function criteriaSummary(criteria) {
 function eventChatReply(criteria, matchCount) {
   const summary = criteriaSummary(criteria);
   if (!summary.length) return 'Add an age, suburb, date, budget or interest.';
-  if (!matchCount) return 'No exact matches yet. Remove one detail or try a nearby suburb.';
+  if (!matchCount) return feedHasMore ? 'No matches in this batch. Tap Load more activities, or try fewer details.' : 'No exact matches yet. Remove one detail or try a nearby suburb.';
   const shown = summary.slice(0, 4).join(' · ');
   const extra = summary.length > 4 ? ` · +${summary.length - 4} more` : '';
-  return `${matchCount} ${matchCount === 1 ? 'match' : 'matches'} · ${shown}${extra}${criteria.petFriendly ? '. Pet suitability is confirmed from the listing text.' : ''}`;
+  return `${matchCount} ${matchCount === 1 ? 'match' : 'matches'}${feedHasMore ? ' so far' : ''} · ${shown}${extra}${criteria.petFriendly ? '. Pet suitability is confirmed from the listing text.' : ''}`;
 }
 
 async function submitEventChat(message) {
@@ -551,6 +609,8 @@ async function submitEventChat(message) {
     const result = await Social.api('/ai/events', {method: 'POST', body: JSON.stringify({messages: userMessages})});
     smartCriteria = result.criteria;
     visibleLimit = 12;
+    await ensureEventSearch();
+    if (feedState === 'error') throw new Error('Council events could not be loaded. Please try again.');
     const matches = filteredEvents().length;
     eventChatMessages.push({role: 'assistant', content: eventChatReply(smartCriteria, matches)});
   } catch (error) {
@@ -617,7 +677,12 @@ document.addEventListener('click', event => {
   if (button.hasAttribute('data-event')) showEvent(button.dataset.event);
   if (button.hasAttribute('data-share-event')) { const event = findEvent(button.dataset.shareEvent); if (event) { modal.close(); Social.compose({title:event.title,body:'Anyone interested in going together?',link:event.url}); } }
   if (button.hasAttribute('data-event-interest')) Social.toggleEventInterest(button.dataset.eventInterest);
-  if (button.hasAttribute('data-more')) { visibleLimit += 12; renderEventResults(); }
+  if (button.hasAttribute('data-more')) {
+    if (loading && route !== 'saved') return;
+    visibleLimit += 12;
+    if (route !== 'saved' && filteredEvents().length < visibleLimit && feedHasMore) loadEvents();
+    else renderEventResults();
+  }
   if (button.hasAttribute('data-reset')) { clearEventFilters(); return; }
   if (button.hasAttribute('data-remove-filter')) {
     removeEventFilter(button.dataset.removeFilter);
@@ -656,6 +721,7 @@ document.addEventListener('input', event => {
   if (event.target.id === 'event-search') {
     eventFilters.search = event.target.value;
     visibleLimit = 12;
+    ensureEventSearch(350);
     renderEventResults();
   } else if (event.target.id === 'event-price-range') {
     document.querySelector('#event-price-value').textContent = event.target.value === '100' ? '$100+' : `$${event.target.value}`;
@@ -665,9 +731,10 @@ document.addEventListener('input', event => {
 // Filter changes preserve all other active filters.
 document.addEventListener('change', event => {
   const field = event.target;
-  if (field.id === 'family-only') familyOnly = field.checked;
-  else if (field.id === 'event-date') eventFilters.date = field.value || 'all';
+  if (field.id === 'event-date') eventFilters.date = field.value || 'all';
   else if (field.id === 'event-category') eventFilters.category = field.value;
+  else if (field.id === 'event-age') eventFilters.age = field.value;
+  else if (field.id === 'event-tag') eventFilters.tag = field.value;
   else if (field.id === 'event-suburb') eventFilters.suburb = field.value;
   else if (field.name === 'price-mode') {
     const range = document.querySelector('#event-price-range');
@@ -677,29 +744,100 @@ document.addEventListener('change', event => {
   else return;
 
   visibleLimit = 12;
+  ensureEventSearch();
   renderEventResults();
 });
+document.addEventListener('focusin', event => { if (event.target.id === 'event-suburb') ensureSuburbOptions(); });
 modal.addEventListener('click', event => { if (event.target === modal) { const bounds = modal.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) modal.close(); } });
 window.addEventListener('hashchange', () => { if (modal.open) modal.close(); visibleLimit = 12; render(); main.focus(); window.scrollTo(0,0); });
 window.addEventListener('popstate', () => { if (!location.hash) { visibleLimit = 12; render(); main.focus(); window.scrollTo(0,0); } });
-let loading = false;
+function eventRequestFilters() {
+  const dates = dateContext();
+  const dateRanges = [eventFilters.date, smartCriteria?.date].map(value => {
+    if (value === 'today') return {start: dates.today, end: dates.today};
+    if (value === 'weekend') return {start: dates.saturday, end: dates.sunday};
+    if (value === 'next7') return {start: dates.today, end: dates.addDays(6)};
+    if (value === 'next30') return {start: dates.today, end: dates.addDays(29)};
+    return /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? {start: value, end: value} : null;
+  }).filter(Boolean);
+  return {
+    search: eventFilters.search.trim(), category: eventFilters.category, tag: eventFilters.tag, dateRanges,
+    suburbs: [eventFilters.suburb === 'All suburbs' ? '' : eventFilters.suburb, smartCriteria?.suburb].filter(Boolean),
+    freeOnly: eventFilters.quick === 'free' || smartCriteria?.freeOnly,
+    familyOnly: true, petFriendly: smartCriteria?.petFriendly, accessibility: smartCriteria?.accessibility
+  };
+}
+
+// Cancel superseded searches; rerendering or changing routes reuses the current query.
+function ensureEventSearch(delay = 0) {
+  if (!['home', 'events'].includes(route)) return Promise.resolve();
+  const key = JSON.stringify([eventFilters, smartCriteria, userLocation]);
+  if (key === feedQueryKey) return feedPromise || Promise.resolve();
+  feedQueryKey = key;
+  feedVersion += 1;
+  feedController?.abort();
+  clearTimeout(feedTimer);
+  loading = false;
+  feedOffset = 0;
+  feedHasMore = false;
+  feedTotal = 0;
+  events = [];
+  feedState = 'loading';
+  if (delay) {
+    feedPromise = null;
+    feedTimer = setTimeout(() => { feedPromise = loadEvents(); }, delay);
+    return Promise.resolve();
+  }
+  feedPromise = loadEvents();
+  return feedPromise;
+}
+
 async function loadEvents() {
   if (loading) return;
-  loading = true; feedState = 'loading'; renderEventResults();
+  const version = feedVersion;
+  const filters = eventRequestFilters();
+  const controller = new AbortController();
+  feedController = controller;
+  loading = true;
+  feedState = 'loading';
+  renderEventResults();
   try {
-    await CouncilEvents.load((loaded, total) => {
-      events = loaded; feedTotal = total;
-      renderEventResults();
-      const suburbs = document.querySelector('#event-suburb');
-      // Add newly discovered suburbs while preserving the current selection.
-      if (suburbs) suburbs.innerHTML = options(suburbOptions(), eventFilters.suburb);
-    });
+    // Filters may need a few candidate pages, but never scan the whole feed automatically.
+    for (let pages = 0; pages < 3; pages += 1) {
+      const page = await CouncilEvents.loadPage(filters, feedOffset, controller.signal);
+      if (version !== feedVersion) return;
+      events = [...new Map([...events, ...page.events].map(event => [event.id, event])).values()];
+      feedTotal = page.total;
+      feedOffset = page.nextOffset;
+      feedHasMore = page.hasMore;
+      if (!feedHasMore || filteredEvents().length >= visibleLimit) break;
+    }
     feedState = 'ready';
-  } catch (error) { feedState = 'error'; console.warn('Council events could not finish loading:', error.message); }
-  finally { loading = false; renderEventResults(); }
+  } catch (error) {
+    if (version !== feedVersion || controller.signal.aborted) return;
+    feedState = 'error';
+    console.warn('Council events could not finish loading:', error.message);
+  } finally {
+    if (version === feedVersion) {
+      loading = false;
+      const suburbs = document.querySelector('#event-suburb');
+      if (suburbs) suburbs.innerHTML = options(suburbOptions(), eventFilters.suburb);
+      renderEventResults();
+    }
+  }
+}
+
+async function ensureSuburbOptions() {
+  if (suburbsPending || eventSuburbs.length) return;
+  suburbsPending = true;
+  try {
+    eventSuburbs = await CouncilEvents.loadSuburbs();
+    const select = document.querySelector('#event-suburb');
+    if (select) select.innerHTML = options(suburbOptions(), eventFilters.suburb);
+  } catch (error) { console.warn('Suburb options could not be loaded:', error.message); }
+  finally { suburbsPending = false; }
 }
 render();
-loadEvents();
 Social.init();
 
 // Progressive enhancement; ordinary browsers do not need WebMCP support.
@@ -717,6 +855,7 @@ if (document.modelContext?.registerTool) {
         if (location.hash !== '#events') {
           await new Promise(resolve => { window.addEventListener('hashchange', resolve, { once: true }); navigate('events'); });
         } else render();
+        await ensureEventSearch();
         return { feedState, matches: filteredEvents().length, activities: filteredEvents().slice(0,12).map(({id,title,date,suburb,costLabel}) => ({id,title,date,suburb,costLabel})) };
       }
     }, { signal: lifecycle.signal })).catch(() => {});
