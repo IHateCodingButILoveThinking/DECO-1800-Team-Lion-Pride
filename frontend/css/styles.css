@@ -711,3 +711,119 @@ body.events-route .event-filter-panel .event-suburb-field { grid-column: span 2;
 @media (max-width: 470px) {
   .event-detail-actions .button { width: 100%; }
 }
+
+
+/* Login and Register Pages */
+
+
+.auth-card {
+  border: 1px solid #e8e8ec;
+  box-shadow: 0 4px 20px rgba(0.06);
+  padding: 40px;
+}
+
+.auth-card img {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.auth-card label {
+  font-weight: 600;
+  margin: 16px 0 6px;
+}
+
+.auth-card input[type="text"],
+.auth-card input[type="email"],
+.auth-card input[type="password"] 
+{
+  min-height: 46px;
+  border: 1px solid #d2d2d7;
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.auth-card input[type="text"]:focus,
+.auth-card input[type="email"]:focus,
+.auth-card input[type="password"]:focus {
+  border-color: #0071e3;
+  box-shadow: 3px #cfe3fa;
+  outline: none;
+}
+
+/* error message under the form. does not show when no error */
+.auth-card .form-error {
+  margin-top: 16px;
+}
+
+.auth-card form .button.primary 
+{
+  min-height: 48px;
+  margin-top: 22px;
+  font-weight: 600;
+}
+
+.auth-divider 
+{
+  margin: 26px 0 18px;
+}
+
+@media (max-width: 640px) 
+{
+  .auth-card {
+    padding: 28px 22px;
+  }
+
+  /* stops iphones zooming in when an input is hit */
+  .auth-card input[type="text"],
+  .auth-card input[type="email"],
+  .auth-card input[type="password"] {
+    font-size: 16px;
+  }
+}
+
+/* Profile page */
+
+.profile-card {
+  text-align: center;
+  border: 1px solid #e8e8ec;
+}
+
+.profile-card .avatar.large {
+  margin: auto;
+}
+
+.profile-card h1 {
+  margin: 16px 6px;
+}
+
+
+.profile-card .club-tags {
+  justify-content: center;
+  margin-top: 16px;
+}
+
+/* Settings page */
+
+/* avatar at top of settings form */
+.settings-avatar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.form-field input,
+.form-field textarea {
+  border: 1px solid #d2d2d7;
+  border-radius: 12px;
+  
+}
+
+.form-field input:focus,
+.form-field textarea:focus {
+  border-color: #0071e3;
+}
+
+.form-field textarea {
+  min-height: 110px;
+}
