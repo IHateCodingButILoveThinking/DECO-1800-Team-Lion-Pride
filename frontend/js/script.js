@@ -295,6 +295,10 @@ function activitiesPage() {
     <div class="section-heading event-results-heading"><h2>${savedPage ? 'Saved activities' : home ? 'Explore activities' : 'Find your next activity'}</h2>${home ? '<a class="text-link" href="#events">View all events ↗</a>' : ''}</div>
     ${!savedPage ? (route === 'events' ? `<section class="event-filter-panel" aria-label="Filter activities">${eventFilterControls()}</section>` : eventFilterControls()) : ''}
     <div id="feed-status" class="result-meta" role="status"></div><div class="event-grid" id="event-results"></div><div id="load-more" class="section-heading"></div>
+    
+    ${home ? `<div class="view-more"><a class="button primary" href="#events"
+      >View more events</a></div>` : ''}
+
     ${home ? `<section class="community-callout"><div><div class="eyebrow">LOCAL CLUBS</div><h2>Share a local find.</h2><p>Plan an activity or meet nearby families.</p></div><a class="button" href="#community">Visit community <span aria-hidden="true">↗</span></a></section>` : ''}`;
 }
 let visibleLimit = 12;

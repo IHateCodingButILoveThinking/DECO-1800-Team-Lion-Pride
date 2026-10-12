@@ -827,3 +827,15 @@ body.events-route .event-filter-panel .event-suburb-field { grid-column: span 2;
 .form-field textarea {
   min-height: 110px;
 }
+
+
+/* view more events button */
+.view-more {
+  text-align: center;           
+  margin-top: 30px;  /* placed in gap under the 6 event cards */
+}
+
+
+.view-more .button {
+  padding: 14px 32px;           
+}
