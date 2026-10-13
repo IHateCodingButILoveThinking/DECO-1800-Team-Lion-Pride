@@ -839,3 +839,21 @@ body.events-route .event-filter-panel .event-suburb-field { grid-column: span 2;
 .view-more .button {
   padding: 14px 32px;           
 }
+
+
+
+/* Save heart button on events popup */
+
+.event-detail-save {
+  right: 56px;                  
+  top: 14px;                   
+  width: 30px;                 
+  height: 30px;
+  background: #f5f5f7;         
+           
+}
+
+
+.event-detail-save[aria-pressed="true"] {
+  background: #f5f5f7;
+}
