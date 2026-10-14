@@ -857,3 +857,17 @@ body.events-route .event-filter-panel .event-suburb-field { grid-column: span 2;
 .event-detail-save[aria-pressed="true"] {
   background: #f5f5f7;
 }
+
+/* blank settings page */
+
+
+html.settings-route {
+  background: #fff;
+}
+
+/* clickable event card */
+
+/* the little hand showing its clickable */
+.event-card {
+  cursor: pointer;
+}

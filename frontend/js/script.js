@@ -88,7 +88,7 @@ function navigate(next) {
 }
 function render() {
   const requested = location.hash.slice(1).split('/')[0];
-  route = ['home', 'events', 'saved', 'community', 'club', 'post', 'member', 'profile', 'settings', 'login', 'register'].includes(requested) ? requested : 'home';
+  route = ['home', 'events', 'saved', 'community', 'club', 'post', 'member', 'profile', 'settings', 'edit-profile', 'login', 'register'].includes(requested) ? requested : 'home';
   document.querySelectorAll('[data-nav]').forEach(link => {
     if (link.dataset.nav === route || (link.dataset.nav === 'community' && ['club','post','member'].includes(route))) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
@@ -96,6 +96,7 @@ function render() {
   document.title = `${route === 'home' ? 'Home' : route[0].toUpperCase() + route.slice(1)} · Family Finds`;
   // Scope larger type to Events without changing the other site pages.
   document.body.classList.toggle('events-route', route === 'events');
+  document.documentElement.classList.toggle('settings-route', route === 'settings');
   document.body.classList.toggle('event-filters-expanded', route === 'events' && eventDetailsOpen);
   if (Social.handles(route)) { Social.show(route); updateCount(); return; }
   main.innerHTML = activitiesPage();
@@ -868,3 +869,17 @@ if (document.modelContext?.registerTool) {
 }
 
 function quickIcon(id) { return icon({free:'heart',weekend:'calendar',markets:'swap',near:'pin'}[id],21); }
+
+
+// clicking anywhere on an event card opens 'view details' 
+document.addEventListener('click', event => {
+  
+  const card = event.target.closest('.event-card');
+  if (!card) return;
+  
+  if (event.target.closest('button, a')) return;
+
+  // id from the card's own 'view details' button
+  const detailsButton = card.querySelector('[data-event]');
+  if (detailsButton) showEvent(detailsButton.dataset.event);
+});
