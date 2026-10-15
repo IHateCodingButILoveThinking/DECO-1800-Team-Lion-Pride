@@ -96,6 +96,8 @@ function render() {
   document.title = `${route === 'home' ? 'Home' : route[0].toUpperCase() + route.slice(1)} · Family Finds`;
   // Scope larger type to Events without changing the other site pages.
   document.body.classList.toggle('events-route', route === 'events');
+  document.body.classList.toggle('home-route', route === 'home');
+  document.body.classList.toggle('community-route', ['community','club','post','member'].includes(route));
   document.body.classList.toggle('event-filters-expanded', route === 'events' && eventDetailsOpen);
   if (Social.handles(route)) { Social.show(route); updateCount(); return; }
   main.innerHTML = activitiesPage();
@@ -161,85 +163,65 @@ function eventFilterControls() {
   const quickFilters = [
     ['free', 'Free', eventFilters.quick === 'free'],
     ['weekend', 'This weekend', eventFilters.date === 'weekend'],
-    ['markets', 'Markets', eventFilters.category === 'Markets & secondhand'],
     ['near', 'Near me', eventFilters.near]
   ];
 
   return `
-    <div class="search-row event-filter-row">
+    <div class="search-row event-filter-row event-filter-search-row">
       <label class="search-field">
         <span aria-hidden="true">${icon('search', 18)}</span>
         <input type="search" id="event-search" aria-label="Search activities"
           placeholder="Search activities or places" value="${escapeHTML(eventFilters.search)}">
       </label>
-    </div>
-    ${route === 'events' ? `
-      <div class="event-filter-section">
-        <span class="event-filter-label">Quick filters</span>
-        <div class="event-quick-filters" role="group" aria-label="Quick filters">
-          ${quickFilters.map(([id, label, active]) => `
-            <button type="button" class="event-quick-filter${active ? ' active' : ''}"
-              data-event-quick="${id}" aria-pressed="${active}">${quickIcon(id)} ${label}</button>`).join('')}
-        </div>
-      </div>
       <button type="button" class="event-filter-toggle" data-filter-toggle
         aria-expanded="${eventDetailsOpen}" aria-controls="event-filter-details">
-        ${icon('filters', 18)} <span>Filters</span><span class="event-filter-count" data-filter-count hidden></span>
+        ${icon('filters', 18)} <span>More filters</span><span class="event-filter-count" data-filter-count hidden></span>
         <span class="event-filter-chevron" aria-hidden="true"></span>
       </button>
-      <div id="event-filter-details" class="event-filter-details${eventDetailsOpen ? ' is-open' : ''}">
-      <span class="event-filter-label event-detailed-label">More filters</span>` : ''}
+    </div>
+    <div class="event-quick-filters" role="group" aria-label="Quick filters">
+      ${quickFilters.map(([id, label, active]) => `
+        <button type="button" class="event-quick-filter${active ? ' active' : ''}"
+          data-event-quick="${id}" aria-pressed="${active}">${quickIcon(id)} ${label}</button>`).join('')}
+    </div>
+    <div id="event-filter-details" class="event-filter-details${eventDetailsOpen ? ' is-open' : ''}">
+      <div class="event-filter-details-heading"><strong>Make it your kind of day</strong><button type="button" data-reset>Clear filters</button></div>
     <div class="search-row event-filter-row event-more-filters">
       <label class="event-date-picker event-filter-field">
         <span class="event-field-label">Date</span>
         <input type="date" id="event-date" aria-label="Activity date" value="${selectedDate}">
       </label>
-      <label class="event-filter-field">
-        <span class="event-field-label">Activity</span>
-        <select id="event-category" aria-label="Activity category">
-          ${options(categories, eventFilters.category)}
-        </select>
-      </label>
-      <label class="event-filter-field">
-        <span class="event-field-label">Child age</span>
-        <select id="event-age" aria-label="Child age range">
-          ${options(['All ages', '0–3 years', '4–7 years', '8–12 years', '13–17 years'], eventFilters.age)}
-        </select>
-      </label>
-      <label class="event-filter-field">
-        <span class="event-field-label">Activity tag</span>
-        <select id="event-tag" aria-label="Activity tag">
-          ${options(['All types', 'Outdoor', 'Creative', 'Sport', 'Nature', 'Music', 'Library', 'Indoor', 'Markets'], eventFilters.tag)}
-        </select>
-      </label>
+      <label class="event-filter-field"><span class="event-field-label">Activity</span><select id="event-category" aria-label="Activity category">${options(categories, eventFilters.category)}</select></label>
+      <label class="event-filter-field event-age-field"><span class="event-field-label">Child age</span><select id="event-age" aria-label="Child age range">${options(['All ages', '0–3 years', '4–7 years', '8–12 years', '13–17 years'], eventFilters.age)}</select></label>
       <label class="event-filter-field event-suburb-field">
         <span class="event-field-label">Suburb</span>
         <select id="event-suburb" aria-label="Suburb">
           ${options(suburbOptions(), eventFilters.suburb)}
         </select>
       </label>
-    </div>
-    <div class="event-secondary-filters">
-      <details class="event-price-filter">
-        <summary class="${eventFilters.quick === 'free' || eventFilters.maxPrice < 100 ? 'active' : ''}">Price</summary>
-        <div class="event-price-panel">
-          <strong>Budget</strong>
-          <div class="event-price-options" role="radiogroup" aria-label="Price type">
-            <label><input type="radio" name="price-mode" value="any" ${eventFilters.quick !== 'free' ? 'checked' : ''}> Any price</label>
-            <label><input type="radio" name="price-mode" value="free" ${eventFilters.quick === 'free' ? 'checked' : ''}> Free only</label>
+      <div class="event-filter-field event-price-field">
+        <span class="event-field-label">Budget</span>
+        <details class="event-price-filter">
+          <summary class="${eventFilters.quick === 'free' || eventFilters.maxPrice < 100 ? 'active' : ''}">Price</summary>
+          <div class="event-price-panel">
+            <strong>Budget</strong>
+            <div class="event-price-options" role="radiogroup" aria-label="Price type">
+              <label><input type="radio" name="price-mode" value="any" ${eventFilters.quick !== 'free' ? 'checked' : ''}> Any price</label>
+              <label><input type="radio" name="price-mode" value="free" ${eventFilters.quick === 'free' ? 'checked' : ''}> Free only</label>
+            </div>
+            <label class="event-price-maximum" for="event-price-range">
+              Maximum price: <strong id="event-price-value">${eventFilters.maxPrice >= 100 ? '$100+' : `$${eventFilters.maxPrice}`}</strong>
+            </label>
+            <input type="range" id="event-price-range" min="0" max="100" step="5"
+              value="${eventFilters.maxPrice}" ${eventFilters.quick === 'free' ? 'disabled' : ''}>
+            <div class="event-price-scale"><span>$0</span><span>$100+</span></div>
+            <button type="button" class="button primary event-price-apply" data-price-apply
+              aria-label="Apply price filter">Apply</button>
           </div>
-          <label class="event-price-maximum" for="event-price-range">
-            Maximum price: <strong id="event-price-value">${eventFilters.maxPrice >= 100 ? '$100+' : `$${eventFilters.maxPrice}`}</strong>
-          </label>
-          <input type="range" id="event-price-range" min="0" max="100" step="5"
-            value="${eventFilters.maxPrice}" ${eventFilters.quick === 'free' ? 'disabled' : ''}>
-          <div class="event-price-scale"><span>$0</span><span>$100+</span></div>
-          <button type="button" class="button primary event-price-apply" data-price-apply
-            aria-label="Apply price filter">Apply</button>
-        </div>
-      </details>
+        </details>
+      </div>
     </div>
-    ${route === 'events' ? '<button type="button" class="button primary event-filter-done" data-filter-close>Show results</button></div>' : ''}
+    <button type="button" class="button primary event-filter-done" data-filter-close>Show activities</button></div>
     <div id="active-filter" role="group" aria-label="Active filters"></div>`;
 }
 
@@ -287,15 +269,17 @@ function eventChatPanel() {
 function activitiesPage() {
   const home = route === 'home';
   const savedPage = route === 'saved';
-  const titles = { home: 'Little adventures.<br>Closer connections.', events: 'Find A Family Activity', saved: 'Saved for later.' };
-  return `${home ? '<div class="hero-shell">' : ''}<section class="home-intro"><div class="eyebrow">${savedPage ? 'SAVED' : 'BRISBANE FAMILY ACTIVITIES'}</div><h1>${titles[route]}</h1><p class="intro">${savedPage ? 'Activities you want to try.' : 'Find free family activities, nearby markets and local clubs.'}</p>${home ? '<div class="hero-actions"><a class="button primary" href="#events">Find an activity</a><a class="button" href="#community">Find a club</a></div>' : ''}</section>${home ? '<div class="hero-picture" id="home-hero-image"><span class="image-fallback">' + icon('leaf',45) + '</span></div></div>' : ''}
+  const titles = { home: 'Out the door.<br>Into Brisbane.', events: 'Find A Family Activity', saved: 'Saved for later.' };
+  return `${home ? '<div class="hero-shell">' : ''}<section class="home-intro"><div class="eyebrow">${savedPage ? 'SAVED' : home ? 'GOOD DAYS, CLOSE TO HOME' : 'BRISBANE FAMILY ACTIVITIES'}</div><h1>${titles[route]}</h1><p class="intro">${savedPage ? 'Activities you want to try.' : home ? 'Pick a park, market or storytime. Find what suits your family, then make a plan with people nearby.' : 'Find free family activities, nearby markets and local clubs.'}</p>${home ? '<div class="hero-actions"><a class="button primary" href="#events">Explore activities</a><a class="button" href="#community">Meet local clubs</a></div><p class="hero-small-note">Local ideas for ordinary afternoons and big weekends.</p>' : ''}</section>${home ? '<div class="hero-picture" id="home-hero-image"><span class="image-fallback">' + icon('leaf',45) + '</span></div></div>' : ''}
     ${home ? `<div class="section-heading"><h2>Quick browse</h2><span class="subtle">A good place to start</span></div><div class="quick-grid">
       ${[['free', '', 'Free activities', 'No-cost ideas'], ['weekend', '', 'This weekend', 'Saturday and Sunday'], ['markets', '', 'Markets & secondhand', 'Markets and swaps'], ['near', '', 'Near me', 'Choose your suburb']].map(([id, icon, title, subtitle]) => `<button class="quick-card" data-quick="${id}"><span class="quick-icon" aria-hidden="true">${quickIcon(id)}</span><span><strong>${title}</strong><small>${subtitle}</small></span></button>`).join('')}</div>` : ''}
     ${route === 'events' ? eventChatPanel() : ''}
-    <div class="section-heading event-results-heading"><h2>${savedPage ? 'Saved activities' : home ? 'Explore activities' : 'Find your next activity'}</h2>${home ? '<a class="text-link" href="#events">View all events ↗</a>' : ''}</div>
-    ${!savedPage ? (route === 'events' ? `<section class="event-filter-panel" aria-label="Filter activities">${eventFilterControls()}</section>` : eventFilterControls()) : ''}
+    ${home ? '<section class="home-picks-section" aria-label="Family activity highlights">' : ''}
+    <div class="section-heading event-results-heading${home ? ' home-featured-heading' : ''}"><div>${home ? '<span class="eyebrow">A FEW IDEAS TO START</span>' : ''}<h2>${savedPage ? 'Saved activities' : home ? 'Family days worth planning' : 'Find your next activity'}</h2>${home ? '<p>A small selection of family-friendly activities from Brisbane City Council.</p>' : ''}</div>${home ? '<a class="text-link" href="#events">Explore all activities ↗</a>' : route === 'events' ? '<a class="text-link" href="#community">Share a community activity ↗</a>' : ''}</div>
+    ${route === 'events' ? `<section class="event-filter-panel" aria-label="Filter activities">${eventFilterControls()}</section>` : ''}
     <div id="feed-status" class="result-meta" role="status"></div><div class="event-grid" id="event-results"></div><div id="load-more" class="section-heading"></div>
-    ${home ? `<section class="community-callout"><div><div class="eyebrow">LOCAL CLUBS</div><h2>Share a local find.</h2><p>Plan an activity or meet nearby families.</p></div><a class="button" href="#community">Visit community <span aria-hidden="true">↗</span></a></section>` : ''}`;
+    ${home ? '</section>' : ''}
+    ${home ? `<section class="community-callout"><div><div class="eyebrow">AROUND THE CORNER</div><h2>Good plans are better shared.</h2><p>Pass an activity on to your club or start a conversation with nearby families.</p></div><a class="button" href="#community">Explore the community <span aria-hidden="true">↗</span></a></section>` : ''}`;
 }
 let visibleLimit = 12;
 
@@ -453,7 +437,8 @@ function renderActiveFilters() {
     </div>` : '';
 }
 function bookingContact(event) {
-  if (event.bookingRequired === false) return { type: 'none' };
+  // Saved activities may contain a copy normalized before the feed wording was fixed.
+  if (event.bookingRequired === false || /^not required\.?$/i.test((event.bookings || '').trim())) return { type: 'none' };
   const url = /^(?:https?:\/\/|mailto:)/i.test(event.bookingUrl || '') ? event.bookingUrl : '';
   if (url.startsWith('mailto:')) return { type: 'email', href: url };
   if (url) return { type: 'website', href: url };
@@ -468,19 +453,32 @@ function eventCard(event) {
   const tags = (event.tags || []).slice(0, 2).map(tag => `<span class="activity-tag">${escapeHTML(tag)}</span>`).join('');
   const contact = bookingContact(event);
   const bookingAction = contact.type === 'none'
-    ? '<span class="booking-note">No booking needed</span>'
+    ? '<span class="booking-note no-registration">No registration needed</span>'
     : contact.type === 'details'
       ? `<button class="card-booking-link" data-event="${escapeHTML(event.id)}">${event.bookingRequired === true ? 'Booking details' : 'Check booking details'}</button>`
       : `<a class="card-booking-link" href="${escapeHTML(contact.href)}" ${contact.type === 'website' ? 'target="_blank" rel="noopener noreferrer"' : ''}>${contact.type === 'email' ? 'Email to book' : contact.type === 'phone' ? `Call ${escapeHTML(contact.label)} ${contact.canBook ? 'to book' : 'for details'}` : 'Book / sign up'} ↗</a>`;
-  return `<article class="event-card"><div class="event-visual">${event.image ? `<img src="${escapeHTML(event.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="image-fallback">${icon(event.category === 'Libraries' ? 'book' : event.category === 'Outdoors' ? 'leaf' : 'calendar',38)}</span>`}<span class="price-label">${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free' : 'Check cost'))}</span><button class="save-button" data-save="${escapeHTML(event.id)}" aria-label="${active ? 'Unsave' : 'Save'} ${escapeHTML(event.title)}" aria-pressed="${active}">${active ? '♥' : '♡'}</button></div><div class="event-content"><h3>${escapeHTML(event.title)}</h3><div class="event-meta"><span>${escapeHTML(event.date || event.day)} · ${escapeHTML(event.timeLabel || event.time || '')}</span><span>${escapeHTML(event.suburb)}${escapeHTML(distanceLabel)}</span><span>${escapeHTML(event.ages)}</span></div>${tags ? `<div class="activity-tags" aria-label="Activity tags">${tags}</div>` : ''}<div class="card-bottom">${bookingAction}<button data-event="${escapeHTML(event.id)}">View details ↗</button></div></div></article>`;
+  return `<article class="event-card" data-event-card="${escapeHTML(event.id)}"><button class="event-card-open" type="button" data-event="${escapeHTML(event.id)}" aria-label="Open details for ${escapeHTML(event.title)}"></button><div class="event-visual">${event.image ? `<img src="${escapeHTML(event.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="image-fallback">${icon(event.category === 'Libraries' ? 'book' : event.category === 'Outdoors' ? 'leaf' : 'calendar',38)}</span>`}<span class="price-label">${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free' : 'Check cost'))}</span><button class="save-button" data-save="${escapeHTML(event.id)}" aria-label="${active ? 'Unsave' : 'Save'} ${escapeHTML(event.title)}" aria-pressed="${active}">${active ? '♥' : '♡'}</button></div><div class="event-content"><h3>${escapeHTML(event.title)}</h3><div class="event-meta"><span>${escapeHTML(event.date || event.day)} · ${escapeHTML(event.timeLabel || event.time || '')}</span><span>${escapeHTML(event.suburb)}${escapeHTML(distanceLabel)}</span><span>${escapeHTML(event.ages)}</span></div>${tags ? `<div class="activity-tags" aria-label="Activity tags">${tags}</div>` : ''}<div class="card-bottom">${bookingAction}</div></div></article>`;
+}
+function homeFeaturedEvents(list) {
+  const ranked = list.map((event, index) => ({event, index, score: (event.image ? 3 : 0) + (event.cost === 0 ? 2 : 0) + (['Outdoors', 'Libraries', 'Creative'].includes(event.category) ? 1 : 0)}))
+    .sort((a, b) => b.score - a.score || a.index - b.index).map(item => item.event);
+  const chosen = [];
+  const categories = new Set();
+  for (const event of ranked) {
+    if (categories.has(event.category)) continue;
+    chosen.push(event);
+    categories.add(event.category);
+    if (chosen.length === 3) return chosen;
+  }
+  return [...chosen, ...ranked.filter(event => !chosen.includes(event))].slice(0, 3);
 }
 function renderEventResults() {
   if (!document.querySelector('#event-results')) return;
   const hero = document.querySelector('#home-hero-image');
   const heroEvent = events.find(event => event.family && event.image && event.category === 'Outdoors') || events.find(event => event.family && event.image);
   if (hero && heroEvent && hero.dataset.event !== heroEvent.id) { hero.dataset.event = heroEvent.id; hero.innerHTML = `<img src="${escapeHTML(heroEvent.image)}" alt="${escapeHTML(heroEvent.title)}" referrerpolicy="no-referrer"><div class="hero-caption"><strong>${escapeHTML(heroEvent.title)}</strong>${escapeHTML(heroEvent.suburb)} · ${escapeHTML(heroEvent.costLabel)}</div>`; }
-  const list = route === 'saved' ? saved : filteredEvents();
-  const limit = route === 'home' ? 6 : visibleLimit;
+  const list = route === 'saved' ? saved : route === 'home' ? homeFeaturedEvents(filteredEvents()) : filteredEvents();
+  const limit = route === 'home' ? 3 : visibleLimit;
   document.querySelector('#event-results').innerHTML = list.length ? list.slice(0, limit).map(eventCard).join('') : `<div class="empty-state"><h3>${route === 'saved' ? 'Your next family day starts here.' : feedState === 'loading' ? 'Finding activities around Brisbane…' : feedState === 'error' ? 'Council events are unavailable right now.' : feedHasMore ? 'No matches in this batch.' : 'No activities match just yet.'}</h3><p>${route === 'saved' ? (Social.profile() ? 'Tap the heart on an activity to keep it here.' : 'Log in to save activities and find them on any device.') : feedState === 'loading' ? 'Looking for activities that match your choices.' : feedState === 'error' ? 'Please try again in a moment.' : feedHasMore ? 'Load more to check further activities, or change your filters.' : 'Try another suburb, category or search.'}</p>${route === 'saved' ? `<a class="button" href="${Social.profile() ? '#events' : '#login'}">${Social.profile() ? 'Explore activities' : 'Log in to save activities'}</a>` : feedState === 'error' ? '<button class="button" data-retry>Try again</button>' : feedState !== 'loading' && !feedHasMore ? '<button class="button" data-reset>Clear filters</button>' : ''}</div>`;
   const hasMore = list.length > limit || feedHasMore;
   const shown = Math.min(list.length, limit);
@@ -489,7 +487,7 @@ function renderEventResults() {
     : `${shown} ${shown === 1 ? 'activity' : 'activities'}${hasMore ? ' · more available' : ''}`;
   const status = route === 'saved'
     ? `${list.length} saved ${list.length === 1 ? 'activity' : 'activities'}`
-    : feedSummary;
+    : route === 'home' && feedState === 'ready' ? `${shown} family ${shown === 1 ? 'idea' : 'ideas'} to explore` : feedSummary;
   document.querySelector('#feed-status').textContent = status;
   if (feedState === 'error' && events.length && route !== 'saved') document.querySelector('#feed-status').insertAdjacentHTML('beforeend',' <button class="button small" data-retry>Retry</button>');
   const more = document.querySelector('#load-more');
@@ -499,7 +497,7 @@ function renderEventResults() {
       ? `<button class="button" data-more ${loading ? 'disabled' : ''}>${loading ? 'Loading…' : 'Load more activities'}</button>` : '';
   renderActiveFilters();
 }
-function showDialog(html) { content.innerHTML = html; modal.removeAttribute('data-event-id'); if (!modal.open) modal.showModal(); }
+function showDialog(html) { content.innerHTML = html; modal.classList.remove('event-detail-modal'); modal.removeAttribute('data-event-id'); if (!modal.open) modal.showModal(); }
 function showEvent(id) {
   const event = findEvent(id);
   if (!event) return;
@@ -512,7 +510,11 @@ function showEvent(id) {
   const sourceAction = sourceUrl
     ? `<a class="button" href="${escapeHTML(sourceUrl)}" target="_blank" rel="noopener noreferrer">Council event listing ↗</a>`
     : '';
-  showDialog(`<div class="eyebrow">FAMILY ACTIVITY</div><h2 id="modal-title">${escapeHTML(event.title)}</h2>${event.image ? `<img class="event-detail-image" src="${escapeHTML(event.image)}" alt="" referrerpolicy="no-referrer">` : ''}${tags ? `<div class="activity-tags event-detail-tags" aria-label="Activity tags">${tags}</div>` : ''}<dl class="detail-list"><dt>Date & time</dt><dd>${escapeHTML(event.time || event.date || 'Check date and time')}</dd><dt>Location</dt><dd>${escapeHTML(event.venue)}${event.address ? `<br>${escapeHTML(event.address)}` : ''}</dd><dt>Cost</dt><dd>${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free entry' : 'Check cost'))}</dd><dt>Suitable for</dt><dd>${escapeHTML(event.ages || 'Check age suitability')}</dd><dt>Bookings</dt><dd>${escapeHTML(event.bookings || (event.bookingRequired === false ? 'No booking needed.' : 'The Council feed does not provide booking instructions for this event.'))}</dd>${event.requirements ? `<dt>Bring along</dt><dd>${escapeHTML(event.requirements)}</dd>` : ''}</dl><h3>About this activity</h3><p>${escapeHTML(event.description || 'No further description is available.')}</p><p class="subtle">Details can change. Check the Council listing before you go, especially for bookings or cancellations.</p>${Social.eventInterestDetail(event.id)}<div class="form-actions event-detail-actions">${bookingAction}${sourceAction}<button class="button" data-share-event="${escapeHTML(event.id)}">Share with a club</button></div>`);
+  const bookingDetails = contact.type === 'none'
+    ? `<strong>No registration needed.</strong>${event.bookings ? `<br>${escapeHTML(event.bookings)}` : ''}`
+    : escapeHTML(event.bookings || 'The Council feed does not provide booking instructions for this event.');
+  showDialog(`<div class="eyebrow">FAMILY ACTIVITY</div><h2 id="modal-title">${escapeHTML(event.title)}</h2>${event.image ? `<img class="event-detail-image" src="${escapeHTML(event.image)}" alt="" referrerpolicy="no-referrer">` : ''}${tags ? `<div class="activity-tags event-detail-tags" aria-label="Activity tags">${tags}</div>` : ''}<dl class="detail-list"><dt>Date & time</dt><dd>${escapeHTML(event.time || event.date || 'Check date and time')}</dd><dt>Location</dt><dd>${escapeHTML(event.venue)}${event.address ? `<br>${escapeHTML(event.address)}` : ''}</dd><dt>Cost</dt><dd>${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free entry' : 'Check cost'))}</dd><dt>Suitable for</dt><dd>${escapeHTML(event.ages || 'Check age suitability')}</dd><dt>Bookings</dt><dd>${bookingDetails}</dd>${event.requirements ? `<dt>Bring along</dt><dd>${escapeHTML(event.requirements)}</dd>` : ''}</dl><h3>About this activity</h3><p>${escapeHTML(event.description || 'No further description is available.')}</p><p class="subtle">Details can change. Check the Council listing before you go, especially for bookings or cancellations.</p>${Social.eventInterestDetail(event.id)}<div class="form-actions event-detail-actions">${bookingAction}${sourceAction}<button class="button" data-share-event="${escapeHTML(event.id)}">Share with a club</button></div>`);
+  modal.classList.add('event-detail-modal');
   modal.dataset.eventId=id;
 }
 
@@ -660,6 +662,11 @@ function toggleEventQuickFilter(quick) {
 }
 
 document.addEventListener('click', event => {
+  const card = event.target.closest('[data-event-card]');
+  if (card && !event.target.closest('button, a, input, select, textarea, summary')) {
+    showEvent(card.dataset.eventCard);
+    return;
+  }
   const button = event.target.closest('button, [data-close]');
   if (!button) return;
   if (button.hasAttribute('data-filter-toggle')) { setEventDetailsOpen(!eventDetailsOpen); return; }
