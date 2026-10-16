@@ -36,7 +36,7 @@ test('Google login and existing password accounts',async t=>{
     });
     await t.test('repeat login uses stable Google subject even if email changes',async()=>{
       const response=await request('/auth/google',{credential:await token({email:'changed@gmail.com'})});assert.equal(response.status,200);assert.equal((await response.json()).profile.id,id);
-      assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM profiles').get().n,1);
+      assert.equal(db.sqlite.prepare("SELECT COUNT(*) AS n FROM profiles WHERE auth_id NOT LIKE 'system:%'").get().n,1);
     });
     await t.test('rejects bad signatures, audience, issuer, expiry and unverified emails',async()=>{
       const wrongKey=(await generateKeyPair('RS256')).privateKey;

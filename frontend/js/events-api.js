@@ -92,7 +92,8 @@ const CouncilEvents = (() => {
     const noBookingText = /^(?:not required|none|no)\.?$/i.test(bookings) ||
       /\b(?:no (?:pre-?)?(?:bookings?|registrations?|reservations?) (?:are |is )?(?:required|needed|necessary)|(?:bookings?|registrations?|reservations?) (?:are |is )?not (?:required|needed|necessary)|(?:no need to|do not need to|don't need to) (?:book|register|reserve))\b/i.test(bookings);
     const requiredBookingText = /\b(?:bookings?|registrations?|reservations?) (?:are |is )?(?:required|essential|needed)\b|\b(?:must|need to) (?:book|register|reserve)\b/i.test(bookings);
-    const bookingRequired = noBookingText
+    // Some listings distinguish participants from spectators; do not label those as registration-free.
+    const bookingRequired = noBookingText && requiredBookingText ? null : noBookingText
       ? false
       : requiredBookingText
         ? true

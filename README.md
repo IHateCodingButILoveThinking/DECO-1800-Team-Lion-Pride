@@ -306,11 +306,11 @@ npm run deploy:backend
 
 ## Data and privacy behaviour
 
-The website saves accounts, profiles, clubs, memberships, posts, replies, reactions, saved activities and event interest in D1. Password derivation happens inside the Worker and login responses use revocable session tokens.
+The website saves accounts, profiles, clubs, memberships, join requests, club blocks, posts, replies, reactions, saved activities and event interest in D1. Password derivation happens inside the Worker and login responses use revocable session tokens. Email-password members can change their email or password in Account settings; either change revokes their other sessions.
 
-Event cards show interested adults only when they share at least one club with the signed-in member. The API does not expose emails, children's names, private age settings or people outside the member's clubs. Club discussions and member lists require membership. User-entered text is escaped in the interface, links require HTTPS, and optional Facebook links are restricted to Facebook or Messenger hosts.
+Event cards show interested adults only when they share at least one club with the signed-in member. The API does not expose emails, children's names, private age settings or people outside the member's clubs. Club discussions and member lists require membership. Private club requests require owner approval; club owners can block members, removing access and preventing new requests. Creating or joining a club requires agreement to the community rules. User-entered text is escaped in the interface, links require HTTPS, and optional Facebook links are restricted to Facebook or Messenger hosts.
 
-The council feed is a rolling extract of published events. Each activity links back to its official listing so families can check availability, suitability and booking requirements.
+The council feed is a rolling extract of published events. Each activity shows one clear next step: the organiser's booking link when available, or the official Council listing for details.
 
 ## Google sign-in
 
@@ -325,6 +325,6 @@ Configuration:
 - For local Google sign-in, also register `http://localhost` and `http://localhost:3000` (or the actual preview port). Use that registered hostname when opening the preview.
 - Redirect URIs may stay empty for this popup/callback flow.
 - While the Google project is in Testing, configure intended test accounts under Audience. Change the publishing status when ready for public use.
-- Deploy the updated Worker with `npm run deploy:backend` and upload the updated frontend to UQ using the deployment steps above. Existing databases need migrations through `0004`; the last migration adds only the free AI daily-usage counter.
+- Deploy the updated Worker with `npm run deploy:backend` and upload the updated frontend to UQ using the deployment steps above. Existing databases need migrations through `0005`; the newest migration adds private-club requests and blocks and seeds three family starter clubs.
 
 Run `npm test` with Node 22.13+ to check AI intent validation and fallback matching alongside signed-token validation, account creation, repeat login, email collision handling, password login, origin checks and logout against an in-memory SQLite database. Tests use generated test keys and never real Google credentials. A real Google popup sign-in still needs a user to complete it on a registered origin.

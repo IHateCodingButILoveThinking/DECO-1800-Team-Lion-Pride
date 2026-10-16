@@ -46,6 +46,21 @@ function emptyEventFilters() {
     near: false
   };
 }
+function activeEventFilters() { return route === 'home' ? emptyEventFilters() : eventFilters; }
+function eventIdentity(event) {
+  const normalise = value => String(value || '').normalize('NFKC').toLocaleLowerCase('en-AU').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const start = Number.isFinite(Date.parse(event.start)) ? new Date(event.start).toISOString().slice(0, 16) : event.dateKey || event.date;
+  return `${normalise(event.title)}|${start}|${normalise(event.venue || event.address || event.suburb)}`;
+}
+function uniqueEvents(items) {
+  const seen = new Set();
+  return items.filter(event => {
+    const key = eventIdentity(event);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 function notify(message) {
   const toast = document.querySelector('#toast');
@@ -275,10 +290,10 @@ function activitiesPage() {
       ${[['free', '', 'Free activities', 'No-cost ideas'], ['weekend', '', 'This weekend', 'Saturday and Sunday'], ['markets', '', 'Markets & secondhand', 'Markets and swaps'], ['near', '', 'Near me', 'Choose your suburb']].map(([id, icon, title, subtitle]) => `<button class="quick-card" data-quick="${id}"><span class="quick-icon" aria-hidden="true">${quickIcon(id)}</span><span><strong>${title}</strong><small>${subtitle}</small></span></button>`).join('')}</div>` : ''}
     ${route === 'events' ? eventChatPanel() : ''}
     ${home ? '<section class="home-picks-section" aria-label="Family activity highlights">' : ''}
-    <div class="section-heading event-results-heading${home ? ' home-featured-heading' : ''}"><div>${home ? '<span class="eyebrow">A FEW IDEAS TO START</span>' : ''}<h2>${savedPage ? 'Saved activities' : home ? 'Family days worth planning' : 'Find your next activity'}</h2>${home ? '<p>A small selection of family-friendly activities from Brisbane City Council.</p>' : ''}</div>${home ? '<a class="text-link" href="#events">Explore all activities ↗</a>' : route === 'events' ? '<a class="text-link" href="#community">Share a community activity ↗</a>' : ''}</div>
+    <div class="section-heading event-results-heading${home ? ' home-featured-heading' : ''}"><div>${home ? '<span class="eyebrow">A FEW IDEAS TO START</span>' : ''}<h2>${savedPage ? 'Saved activities' : home ? 'Family days worth planning' : 'Find your next activity'}</h2>${home ? '<p>Six family-friendly ideas from Brisbane City Council.</p>' : ''}</div>${route === 'events' ? '<a class="text-link" href="#community">Share a community activity ↗</a>' : ''}</div>
     ${route === 'events' ? `<section class="event-filter-panel" aria-label="Filter activities">${eventFilterControls()}</section>` : ''}
     <div id="feed-status" class="result-meta" role="status"></div><div class="event-grid" id="event-results"></div><div id="load-more" class="section-heading"></div>
-    ${home ? '</section>' : ''}
+    ${home ? '<div class="home-all-events"><a class="button primary" href="#events">View all events</a></div></section>' : ''}
     ${home ? `<section class="community-callout"><div><div class="eyebrow">AROUND THE CORNER</div><h2>Good plans are better shared.</h2><p>Pass an activity on to your club or start a conversation with nearby families.</p></div><a class="button" href="#community">Explore the community <span aria-hidden="true">↗</span></a></section>` : ''}`;
 }
 let visibleLimit = 12;
@@ -333,7 +348,7 @@ const childAgeGroups = {
 };
 
 function eventMatchesSmartCriteria(event, dates) {
-  if (!smartCriteria) return true;
+  if (route === 'home' || !smartCriteria) return true;
   const searchable = `${event.title} ${event.category} ${event.suburb} ${event.venue} ${event.description} ${event.requirements} ${event.ages}`.toLowerCase();
   const suburb = smartCriteria.suburb?.toLowerCase().trim();
   const matchesSuburb = !suburb || event.suburb.toLowerCase().includes(suburb) || suburb.includes(event.suburb.toLowerCase());
@@ -352,24 +367,25 @@ function eventMatchesSmartCriteria(event, dates) {
 // Event filter matching uses Brisbane calendar dates, so "Next 7 days" includes today.
 function filteredEvents() {
   const dates = dateContext();
-  const selectedSuburb = eventFilters.suburb.toLowerCase();
+  const filters = activeEventFilters();
+  const selectedSuburb = filters.suburb.toLowerCase();
 
   const matches = events.filter(event => {
-    const matchesDate = matchesEventDate(event, eventFilters.date, dates);
-    const matchesSuburb = eventFilters.suburb === 'All suburbs' ||
+    const matchesDate = matchesEventDate(event, filters.date, dates);
+    const matchesSuburb = filters.suburb === 'All suburbs' ||
       event.suburb.toLowerCase() === selectedSuburb;
-    const matchesCategory = eventFilters.category === 'All activities' ||
-      event.category === eventFilters.category;
-    const matchesAge = eventFilters.age === 'All ages' ||
-      eventAgeMatches(event, childAgeGroups[eventFilters.age]);
-    const matchesTag = eventFilters.tag === 'All types' ||
-      (event.tags || []).includes(eventFilters.tag);
-    const matchesFree = eventFilters.quick !== 'free' || event.cost === 0;
+    const matchesCategory = filters.category === 'All activities' ||
+      event.category === filters.category;
+    const matchesAge = filters.age === 'All ages' ||
+      eventAgeMatches(event, childAgeGroups[filters.age]);
+    const matchesTag = filters.tag === 'All types' ||
+      (event.tags || []).includes(filters.tag);
+    const matchesFree = filters.quick !== 'free' || event.cost === 0;
     const price = eventPrice(event);
-    const matchesPrice = eventFilters.maxPrice >= 100 ||
-      (price !== null && price <= eventFilters.maxPrice);
+    const matchesPrice = filters.maxPrice >= 100 ||
+      (price !== null && price <= filters.maxPrice);
     const distance = eventDistance(event);
-    const matchesNear = !eventFilters.near || (distance !== null && distance <= 10);
+    const matchesNear = !filters.near || (distance !== null && distance <= 10);
 
     return event.family &&
       matchesDate &&
@@ -382,7 +398,7 @@ function filteredEvents() {
       matchesNear &&
       eventMatchesSmartCriteria(event, dates);
   });
-  return eventFilters.near
+  return filters.near
     ? matches.sort((first, second) => eventDistance(first) - eventDistance(second))
     : matches;
 }
@@ -438,7 +454,8 @@ function renderActiveFilters() {
 }
 function bookingContact(event) {
   // Saved activities may contain a copy normalized before the feed wording was fixed.
-  if (event.bookingRequired === false || /^not required\.?$/i.test((event.bookings || '').trim())) return { type: 'none' };
+  const mixedBooking = /\bbookings?\s+(?:are\s+)?required\b/i.test(event.bookings || '') && /\bno bookings?\s+(?:are\s+)?required\b/i.test(event.bookings || '');
+  if (!mixedBooking && (event.bookingRequired === false || /^not required\.?$/i.test((event.bookings || '').trim()))) return { type: 'none' };
   const url = /^(?:https?:\/\/|mailto:)/i.test(event.bookingUrl || '') ? event.bookingUrl : '';
   if (url.startsWith('mailto:')) return { type: 'email', href: url };
   if (url) return { type: 'website', href: url };
@@ -446,17 +463,21 @@ function bookingContact(event) {
   if (phone && event.bookingPhone) return { type: 'phone', href: phone, label: event.bookingPhone, canBook: event.bookingPhoneCanBook };
   return { type: 'details' };
 }
+function bookingLinkLabel(event) {
+  return /bookings?\s+(?:are\s+)?required\s+for\s+players/i.test(event.bookings || '') && /no bookings?\s+(?:are\s+)?required\s+for\s+spectators/i.test(event.bookings || '')
+    ? 'Players: book online' : 'Book with organiser';
+}
 function eventCard(event) {
   const active = isSaved(event.id);
   const distance = eventDistance(event);
-  const distanceLabel = eventFilters.near && distance !== null ? ` · ${distance.toFixed(1)} km away` : '';
+  const distanceLabel = route === 'events' && eventFilters.near && distance !== null ? ` · ${distance.toFixed(1)} km away` : '';
   const tags = (event.tags || []).slice(0, 2).map(tag => `<span class="activity-tag">${escapeHTML(tag)}</span>`).join('');
   const contact = bookingContact(event);
   const bookingAction = contact.type === 'none'
     ? '<span class="booking-note no-registration">No registration needed</span>'
     : contact.type === 'details'
       ? `<button class="card-booking-link" data-event="${escapeHTML(event.id)}">${event.bookingRequired === true ? 'Booking details' : 'Check booking details'}</button>`
-      : `<a class="card-booking-link" href="${escapeHTML(contact.href)}" ${contact.type === 'website' ? 'target="_blank" rel="noopener noreferrer"' : ''}>${contact.type === 'email' ? 'Email to book' : contact.type === 'phone' ? `Call ${escapeHTML(contact.label)} ${contact.canBook ? 'to book' : 'for details'}` : 'Book / sign up'} ↗</a>`;
+      : `<a class="card-booking-link" href="${escapeHTML(contact.href)}" ${contact.type === 'website' ? 'target="_blank" rel="noopener noreferrer"' : ''}>${contact.type === 'email' ? 'Email to book' : contact.type === 'phone' ? `Call ${escapeHTML(contact.label)} ${contact.canBook ? 'to book' : 'for details'}` : bookingLinkLabel(event)} ↗</a>`;
   return `<article class="event-card" data-event-card="${escapeHTML(event.id)}"><button class="event-card-open" type="button" data-event="${escapeHTML(event.id)}" aria-label="Open details for ${escapeHTML(event.title)}"></button><div class="event-visual">${event.image ? `<img src="${escapeHTML(event.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="image-fallback">${icon(event.category === 'Libraries' ? 'book' : event.category === 'Outdoors' ? 'leaf' : 'calendar',38)}</span>`}<span class="price-label">${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free' : 'Check cost'))}</span><button class="save-button" data-save="${escapeHTML(event.id)}" aria-label="${active ? 'Unsave' : 'Save'} ${escapeHTML(event.title)}" aria-pressed="${active}">${active ? '♥' : '♡'}</button></div><div class="event-content"><h3>${escapeHTML(event.title)}</h3><div class="event-meta"><span>${escapeHTML(event.date || event.day)} · ${escapeHTML(event.timeLabel || event.time || '')}</span><span>${escapeHTML(event.suburb)}${escapeHTML(distanceLabel)}</span><span>${escapeHTML(event.ages)}</span></div>${tags ? `<div class="activity-tags" aria-label="Activity tags">${tags}</div>` : ''}<div class="card-bottom">${bookingAction}</div></div></article>`;
 }
 function homeFeaturedEvents(list) {
@@ -468,9 +489,9 @@ function homeFeaturedEvents(list) {
     if (categories.has(event.category)) continue;
     chosen.push(event);
     categories.add(event.category);
-    if (chosen.length === 3) return chosen;
+    if (chosen.length === 6) return chosen;
   }
-  return [...chosen, ...ranked.filter(event => !chosen.includes(event))].slice(0, 3);
+  return [...chosen, ...ranked.filter(event => !chosen.includes(event))].slice(0, 6);
 }
 function renderEventResults() {
   if (!document.querySelector('#event-results')) return;
@@ -478,7 +499,7 @@ function renderEventResults() {
   const heroEvent = events.find(event => event.family && event.image && event.category === 'Outdoors') || events.find(event => event.family && event.image);
   if (hero && heroEvent && hero.dataset.event !== heroEvent.id) { hero.dataset.event = heroEvent.id; hero.innerHTML = `<img src="${escapeHTML(heroEvent.image)}" alt="${escapeHTML(heroEvent.title)}" referrerpolicy="no-referrer"><div class="hero-caption"><strong>${escapeHTML(heroEvent.title)}</strong>${escapeHTML(heroEvent.suburb)} · ${escapeHTML(heroEvent.costLabel)}</div>`; }
   const list = route === 'saved' ? saved : route === 'home' ? homeFeaturedEvents(filteredEvents()) : filteredEvents();
-  const limit = route === 'home' ? 3 : visibleLimit;
+  const limit = route === 'home' ? 6 : visibleLimit;
   document.querySelector('#event-results').innerHTML = list.length ? list.slice(0, limit).map(eventCard).join('') : `<div class="empty-state"><h3>${route === 'saved' ? 'Your next family day starts here.' : feedState === 'loading' ? 'Finding activities around Brisbane…' : feedState === 'error' ? 'Council events are unavailable right now.' : feedHasMore ? 'No matches in this batch.' : 'No activities match just yet.'}</h3><p>${route === 'saved' ? (Social.profile() ? 'Tap the heart on an activity to keep it here.' : 'Log in to save activities and find them on any device.') : feedState === 'loading' ? 'Looking for activities that match your choices.' : feedState === 'error' ? 'Please try again in a moment.' : feedHasMore ? 'Load more to check further activities, or change your filters.' : 'Try another suburb, category or search.'}</p>${route === 'saved' ? `<a class="button" href="${Social.profile() ? '#events' : '#login'}">${Social.profile() ? 'Explore activities' : 'Log in to save activities'}</a>` : feedState === 'error' ? '<button class="button" data-retry>Try again</button>' : feedState !== 'loading' && !feedHasMore ? '<button class="button" data-reset>Clear filters</button>' : ''}</div>`;
   const hasMore = list.length > limit || feedHasMore;
   const shown = Math.min(list.length, limit);
@@ -505,16 +526,16 @@ function showEvent(id) {
   const contact = bookingContact(event);
   const sourceUrl = event.live && /^https:\/\//i.test(event.url || '') ? event.url : '';
   const bookingAction = contact.href
-    ? `<a class="button primary" href="${escapeHTML(contact.href)}" ${contact.type === 'website' ? 'target="_blank" rel="noopener noreferrer"' : ''}>${contact.type === 'email' ? 'Email to book' : contact.type === 'phone' ? `Call ${escapeHTML(contact.label)} ${contact.canBook ? 'to book' : 'for details'}` : 'Book or sign up'} ↗</a>`
+    ? `<a class="button primary" href="${escapeHTML(contact.href)}" ${contact.type === 'website' ? 'target="_blank" rel="noopener noreferrer"' : ''}>${contact.type === 'email' ? 'Email organiser' : contact.type === 'phone' ? `Call ${escapeHTML(contact.label)} ${contact.canBook ? 'to book' : 'for details'}` : bookingLinkLabel(event)} ↗</a>`
     : '';
-  const sourceAction = sourceUrl
-    ? `<a class="button" href="${escapeHTML(sourceUrl)}" target="_blank" rel="noopener noreferrer">Council event listing ↗</a>`
+  const sourceAction = sourceUrl && !contact.href
+    ? `<a class="button" href="${escapeHTML(sourceUrl)}" target="_blank" rel="noopener noreferrer">View Council listing ↗</a>`
     : '';
   const bookingDetails = contact.type === 'none'
     ? `<strong>No registration needed.</strong>${event.bookings ? `<br>${escapeHTML(event.bookings)}` : ''}`
     : escapeHTML(event.bookings || 'The Council feed does not provide booking instructions for this event.');
   const active = isSaved(id);
-  showDialog(`<button class="save-button event-detail-save" type="button" data-save="${escapeHTML(id)}" aria-pressed="${active}" aria-label="${active ? 'Unsave' : 'Save'} ${escapeHTML(event.title)}">${active ? '♥' : '♡'}</button><div class="eyebrow">FAMILY ACTIVITY</div><h2 id="modal-title">${escapeHTML(event.title)}</h2>${event.image ? `<img class="event-detail-image" src="${escapeHTML(event.image)}" alt="" referrerpolicy="no-referrer">` : ''}${tags ? `<div class="activity-tags event-detail-tags" aria-label="Activity tags">${tags}</div>` : ''}<dl class="detail-list"><dt>Date & time</dt><dd>${escapeHTML(event.time || event.date || 'Check date and time')}</dd><dt>Location</dt><dd>${escapeHTML(event.venue)}${event.address ? `<br>${escapeHTML(event.address)}` : ''}</dd><dt>Cost</dt><dd>${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free entry' : 'Check cost'))}</dd><dt>Suitable for</dt><dd>${escapeHTML(event.ages || 'Check age suitability')}</dd><dt>Bookings</dt><dd>${bookingDetails}</dd>${event.requirements ? `<dt>Bring along</dt><dd>${escapeHTML(event.requirements)}</dd>` : ''}</dl><h3>About this activity</h3><p>${escapeHTML(event.description || 'No further description is available.')}</p><p class="subtle">Details can change. Check the Council listing before you go, especially for bookings or cancellations.</p>${Social.eventInterestDetail(event.id)}<div class="form-actions event-detail-actions">${bookingAction}${sourceAction}<button class="button" data-share-event="${escapeHTML(event.id)}">Share with a club</button></div>`);
+  showDialog(`<button class="save-button event-detail-save" type="button" data-save="${escapeHTML(id)}" aria-pressed="${active}" aria-label="${active ? 'Unsave' : 'Save'} ${escapeHTML(event.title)}">${active ? '♥' : '♡'}</button><div class="eyebrow">FAMILY ACTIVITY</div><h2 id="modal-title">${escapeHTML(event.title)}</h2>${event.image ? `<img class="event-detail-image" src="${escapeHTML(event.image)}" alt="" referrerpolicy="no-referrer">` : ''}${tags ? `<div class="activity-tags event-detail-tags" aria-label="Activity tags">${tags}</div>` : ''}<dl class="detail-list"><dt>Date & time</dt><dd>${escapeHTML(event.time || event.date || 'Check date and time')}</dd><dt>Location</dt><dd>${escapeHTML(event.venue)}${event.address ? `<br>${escapeHTML(event.address)}` : ''}</dd><dt>Cost</dt><dd>${escapeHTML(event.costLabel || (event.cost === 0 ? 'Free entry' : 'Check cost'))}</dd><dt>Suitable for</dt><dd>${escapeHTML(event.ages || 'Check age suitability')}</dd><dt>Bookings</dt><dd>${bookingDetails}</dd>${event.requirements ? `<dt>Bring along</dt><dd>${escapeHTML(event.requirements)}</dd>` : ''}</dl><h3>About this activity</h3><p>${escapeHTML(event.description || 'No further description is available.')}</p><p class="subtle">Details can change. Confirm times and bookings before you go.</p>${Social.eventInterestDetail(event.id)}<div class="form-actions event-detail-actions">${bookingAction}${sourceAction}<button class="button" data-share-event="${escapeHTML(event.id)}">Share with a club</button></div>`);
   modal.classList.add('event-detail-modal');
   modal.dataset.eventId=id;
 }
@@ -761,7 +782,9 @@ window.addEventListener('hashchange', () => { if (modal.open) modal.close(); vis
 window.addEventListener('popstate', () => { if (!location.hash) { visibleLimit = 12; render(); main.focus(); window.scrollTo(0,0); } });
 function eventRequestFilters() {
   const dates = dateContext();
-  const dateRanges = [eventFilters.date, smartCriteria?.date].map(value => {
+  const filters = activeEventFilters();
+  const criteria = route === 'home' ? null : smartCriteria;
+  const dateRanges = [filters.date, criteria?.date].map(value => {
     if (value === 'today') return {start: dates.today, end: dates.today};
     if (value === 'weekend') return {start: dates.saturday, end: dates.sunday};
     if (value === 'next7') return {start: dates.today, end: dates.addDays(6)};
@@ -769,17 +792,17 @@ function eventRequestFilters() {
     return /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? {start: value, end: value} : null;
   }).filter(Boolean);
   return {
-    search: eventFilters.search.trim(), category: eventFilters.category, tag: eventFilters.tag, dateRanges,
-    suburbs: [eventFilters.suburb === 'All suburbs' ? '' : eventFilters.suburb, smartCriteria?.suburb].filter(Boolean),
-    freeOnly: eventFilters.quick === 'free' || smartCriteria?.freeOnly,
-    familyOnly: true, petFriendly: smartCriteria?.petFriendly, accessibility: smartCriteria?.accessibility
+    search: filters.search.trim(), category: filters.category, tag: filters.tag, dateRanges,
+    suburbs: [filters.suburb === 'All suburbs' ? '' : filters.suburb, criteria?.suburb].filter(Boolean),
+    freeOnly: filters.quick === 'free' || criteria?.freeOnly,
+    familyOnly: true, petFriendly: criteria?.petFriendly, accessibility: criteria?.accessibility
   };
 }
 
 // Cancel superseded searches; rerendering or changing routes reuses the current query.
 function ensureEventSearch(delay = 0) {
   if (!['home', 'events'].includes(route)) return Promise.resolve();
-  const key = JSON.stringify([eventFilters, smartCriteria, userLocation]);
+  const key = JSON.stringify([route, activeEventFilters(), route === 'home' ? null : smartCriteria, route === 'home' ? null : userLocation]);
   if (key === feedQueryKey) return feedPromise || Promise.resolve();
   feedQueryKey = key;
   feedVersion += 1;
@@ -814,7 +837,7 @@ async function loadEvents() {
     for (let pages = 0; pages < 3; pages += 1) {
       const page = await CouncilEvents.loadPage(filters, feedOffset, controller.signal);
       if (version !== feedVersion) return;
-      events = [...new Map([...events, ...page.events].map(event => [event.id, event])).values()];
+      events = uniqueEvents([...events, ...page.events]);
       feedTotal = page.total;
       feedOffset = page.nextOffset;
       feedHasMore = page.hasMore;

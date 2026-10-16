@@ -1010,6 +1010,34 @@ body.events-route .event-filter-panel .active-filter-list { margin-top: 12px; }
 .account-settings-panel .setting-row { flex-wrap: wrap; gap: 12px; }
 .account-settings-panel .setting-row .button { flex-shrink: 0; }
 
+.home-all-events { display: flex; justify-content: center; margin: 28px 0 46px; }
+.home-all-events .button { min-width: 190px; }
+.header-account .account-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.account-settings-link { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; color: #347760; background: #eaf2ed; }
+.account-settings-link:hover { background: #dcebe1; }
+.settings-stack { display: grid; gap: 18px; }
+.settings-stack .form-panel { width: 100%; }
+.club-access-label { display: inline-block; margin-bottom: 8px; color: #356b56; font-size: .72rem; font-weight: 700; }
+.club-privacy-option { display: flex !important; align-items: flex-start; gap: 10px; margin: 22px 0 !important; padding: 16px; background: #f4f7f2; border-radius: 12px; }
+.club-privacy-option input, .rules-agreement input { width: 18px !important; height: 18px; min-height: 18px; flex: 0 0 18px; margin: 1px 0 0; accent-color: #2e765a; }
+.club-privacy-option small { display: block; color: var(--muted); font-weight: 400; }
+.rules-agreement { background: #edf4ee; border: 1px solid #c8dece; border-radius: 14px; padding: 18px; margin-top: 22px; }
+.rules-agreement strong { color: #285c45; }
+.rules-agreement label { display: flex; align-items: flex-start; gap: 10px; margin: 15px 0 0; font-weight: 600; }
+.community-rules { padding-left: 20px; margin: 12px 0; color: #355747; font-size: .85rem; line-height: 1.7; }
+.community-rules-banner { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; margin: 18px 0 26px; padding: 14px 18px; border: 1px solid #cfdfd0; border-radius: 12px; background: #edf4ee; color: #285c45; font-size: .85rem; }
+.community-rules-banner strong { display: inline-flex; align-items: center; gap: 7px; }
+.owner-panel { max-width: none; }
+.owner-panel h2:not(:first-child) { margin-top: 28px; }
+.moderation-row { display: flex; justify-content: space-between; gap: 15px; align-items: center; border-top: 1px solid var(--line); padding: 14px 0; }
+.moderation-row > div { display: flex; gap: 8px; }
+.member-card { justify-content: space-between; gap: 8px; }
+.member-card-person { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.member-card .button { margin-left: auto; }
+.club-join-explainer { max-width: none; }
+@media (max-width: 760px) { .header-account .account-name { max-width: 100px; } .account-settings-link { width: 32px; height: 32px; } }
+@media (max-width: 470px) { .header-account .account-name { display: none !important; } .moderation-row { align-items: flex-start; flex-direction: column; } }
+
 @media (max-width: 1000px) {
   body.events-route .event-filter-panel .event-more-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .home-route .event-grid { grid-template-columns: 1fr; }
