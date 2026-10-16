@@ -89,12 +89,15 @@ const CouncilEvents = (() => {
     const bookings = plain(row.bookings);
     const bookingUrl = bookingLink(row.bookings);
     const phone = bookingPhone(row.bookings);
-    const bookingRequired = /\b(?:no bookings? (?:are )?required|bookings? (?:are )?not required|no reservation (?:is )?required)\b/i.test(bookings)
+    const noBookingText = /^(?:not required|none|no)\.?$/i.test(bookings) ||
+      /\b(?:no (?:pre-?)?(?:bookings?|registrations?|reservations?) (?:are |is )?(?:required|needed|necessary)|(?:bookings?|registrations?|reservations?) (?:are |is )?not (?:required|needed|necessary)|(?:no need to|do not need to|don't need to) (?:book|register|reserve))\b/i.test(bookings);
+    const requiredBookingText = /\b(?:bookings?|registrations?|reservations?) (?:are |is )?(?:required|essential|needed)\b|\b(?:must|need to) (?:book|register|reserve)\b/i.test(bookings);
+    const bookingRequired = noBookingText
       ? false
-      : bookingUrl || /\b(?:bookings? (?:are )?(?:required|essential)|registration (?:is )?required)\b/i.test(bookings) ||
-        /^yes$/i.test(plain(row.bookingsrequired))
+      : requiredBookingText
         ? true
-        : /^(?:no|not required|none)$/i.test(plain(row.bookingsrequired)) ? false : null;
+        : /^(?:no|not required|none)$/i.test(plain(row.bookingsrequired)) ? false
+          : /^yes$/i.test(plain(row.bookingsrequired)) ? true : null;
     return {
       id: `bcc-${rawLink || row.subject}-${row.start_datetime}`,
       image: /^https:\/\//i.test(String(row.eventimage || '')) ? String(row.eventimage) : '',

@@ -3,12 +3,68 @@ const Social = (() => {
   const interests = ['Outdoor play', 'Arts & crafts', 'Books & stories', 'Sports & movement', 'Nature & gardening', 'Markets & swaps', 'Weekend adventures', 'Parent support'];
   const ageGroups = ['0–3 years', '4–7 years', '8–12 years', 'Teens', 'All ages'];
   const topics = ['Meetups', 'Local tips', 'Swap & share', 'Ask for help'];
+  const demoClubs = [
+    {id:'weekend-explorers',name:'Weekend Explorers',suburb:'West End',color:'green',glyph:'leaf',interests:['Outdoor play','Weekend adventures'],description:'A draft club for families who want relaxed walks, parks and weekend play dates.',plan:'Start with a Saturday park meetup and a shared list of favourite free places.'},
+    {id:'little-makers',name:'Little Makers',suburb:'Indooroopilly',color:'purple',glyph:'art',interests:['Arts & crafts','Books & stories'],description:'A draft space to swap creative ideas and plan low-cost making sessions.',plan:'Meet at a local library, bring simple materials and share ideas in a club discussion.'},
+    {id:'market-mates',name:'Market Mates',suburb:'Wynnum',color:'orange',glyph:'people',interests:['Markets & swaps','Parent support'],description:'A draft club for families browsing markets, swaps and local finds together.',plan:'Share a market event and agree on a public meeting point before visiting.'}
+  ];
   let me = null, ready = false, connectionError = '', clubs = [], discussions = [], club = null, members = [], interestByEvent = {};
   let section = 'discover', clubTab = 'discussions', search = '', suburb = '', interest = '', topic = '';
   let requestVersion = 0;
   const apiOrigin = String(window.FAMILY_FINDS_CONFIG?.apiOrigin || '').replace(/\/$/, '');
   const sessionKey = 'family_finds_session';
   const e = value => escapeHTML(value);
+  // Keep a useful offline list; Council event locations add more suggestions when available.
+  const suburbSuggestions = new Set([
+    'Ascot', 'Ashgrove', 'Balmoral', 'Brisbane City', 'Bulimba', 'Camp Hill',
+    'Carina', 'Chermside', 'Coorparoo', 'Darra', 'East Brisbane', 'Eight Mile Plains',
+    'Everton Park', 'Fortitude Valley', 'Graceville', 'Hamilton', 'Highgate Hill',
+    'Indooroopilly', 'Kangaroo Point', 'Kelvin Grove', 'Kenmore', 'Manly',
+    'Milton', 'Moorooka', 'Mount Gravatt', 'New Farm', 'Newmarket', 'Nundah',
+    'Paddington', 'Red Hill', 'Rochedale', 'St Lucia', 'South Brisbane',
+    'Spring Hill', 'Stafford', 'Sunnybank', 'Taringa', 'Tarragindi', 'Toowong',
+    'Upper Mount Gravatt', 'West End', 'Woolloongabba', 'Wynnum', 'Yeronga'
+  ]);
+  let suburbSuggestionsRequest;
+  function formatSuburb(value) {
+    const name = String(value || '').normalize('NFKC').replace(/\s+/g, ' ')
+      .replace(/(?:,?\s+(?:QLD|Queensland))?(?:\s+\d{4})$/i, '')
+      .replace(/,?\s+(?:QLD|Queensland)$/i, '').trim();
+    if (!name) return '';
+    const known = [...suburbSuggestions].find(item => item.toLocaleLowerCase('en-AU') === name.toLocaleLowerCase('en-AU'));
+    return known || name.replace(/\p{L}+/gu, word => word[0].toLocaleUpperCase('en-AU') + word.slice(1).toLocaleLowerCase('en-AU'));
+  }
+  function updateSuburbLists() {
+    const values = [...suburbSuggestions].sort((a, b) => a.localeCompare(b, 'en-AU'));
+    document.querySelectorAll('datalist[data-suburb-options]').forEach(list => {
+      list.replaceChildren(...values.map(value => {
+        const option = document.createElement('option');
+        option.value = value;
+        return option;
+      }));
+    });
+  }
+  function attachSuburbList(input) {
+    if (!input.list) {
+      const list = document.createElement('datalist');
+      list.id = `${input.id}-suggestions`;
+      list.dataset.suburbOptions = '';
+      input.after(list);
+      input.setAttribute('list', list.id);
+    }
+    if (profile()?.suburb) suburbSuggestions.add(formatSuburb(profile().suburb));
+    clubs.forEach(item => { if (item.suburb) suburbSuggestions.add(formatSuburb(item.suburb)); });
+    updateSuburbLists();
+    if (!suburbSuggestionsRequest) {
+      suburbSuggestionsRequest = CouncilEvents.loadSuburbs().then(values => {
+        values.forEach(value => {
+          const name = formatSuburb(value);
+          if (/^[\p{L}][\p{L}\s'-]{1,58}$/u.test(name)) suburbSuggestions.add(name);
+        });
+        updateSuburbLists();
+      }).catch(() => { suburbSuggestionsRequest = null; });
+    }
+  }
   const initials = name => String(name || '').split(/\s+/).filter(Boolean).slice(0,2).map(word => word[0]).join('').toUpperCase();
   const ago = value => { const mins = Math.max(0,Math.floor((Date.now()-value)/60000)); return mins<1?'Just now':mins<60?`${mins}m ago`:mins<1440?`${Math.floor(mins/60)}h ago`:new Date(value).toLocaleDateString('en-AU',{day:'numeric',month:'short',timeZone:'Australia/Brisbane'}); };
   async function api(path, options={}) {
@@ -69,7 +125,7 @@ const Social = (() => {
       // A saved-activities outage must not undo a successful sign-in.
       try{const data=await api('/saved');saved=data.events;await refreshEventInterest();}catch{notify('Signed in. Saved activities could not be loaded yet.');}
       updateCount();accountHeader();
-      notify(result.created?'Welcome! You can add your suburb and interests in Settings.':'Welcome back.');
+      notify(result.created?'Welcome! You can add your suburb and interests in Edit profile.':'Welcome back.');
       navigate(result.created?'edit-profile':'community');
     }catch(error){if(status?.isConnected)status.textContent=error.message;else notify(error.message);}
     finally{googleBusy=false;}
@@ -114,14 +170,10 @@ const Social = (() => {
     const version=++requestVersion;
     if(['login','register'].includes(route)){main.innerHTML=authPage(route);return;}
     if(!ready){main.innerHTML=spinner();return;}
-    if(connectionError){main.innerHTML=errorPanel(connectionError);return;}
-    // settings page, only works when logged in 
-    if(route==='settings'){
-      if(!profile()){
-        main.innerHTML=authPage('login');
-        return;
-      }
-      main.innerHTML='';
+    if(connectionError){main.innerHTML=route==='community'?demoOffline():errorPanel(connectionError);return;}
+    if(route==='settings'||route==='edit-profile'){
+      if(!profile()){main.innerHTML=authPage('login');return;}
+      main.innerHTML=route==='settings'?settingsPage():editProfilePage();
       return;
     }
     main.innerHTML=spinner();
@@ -135,17 +187,14 @@ const Social = (() => {
       }else if(route==='profile'||route==='member'){
         if(!profile()){main.innerHTML=authPage('login');return;}
         const id=route==='member'?location.hash.split('/')[1]:profile().id;const [data,c]=await Promise.all([api(`/profiles/${encodeURIComponent(id)}`),api('/clubs')]);if(version!==requestVersion)return;clubs=c.clubs;main.innerHTML=profilePage(data,route==='profile');
-
-
-      }else if(route==='edit-profile'){  //old profile and privacy form
-        if(!profile()){main.innerHTML=authPage('login');return;}main.innerHTML=settingsPage();
-      
       }else if(route==='post'){
         const data=await api(`/posts/${encodeURIComponent(location.hash.split('/')[1])}`);if(version!==requestVersion)return;main.innerHTML=postPage(data);
       }
-    }catch(error){if(version===requestVersion)main.innerHTML=errorPanel(error.message);}
+    }catch(error){if(version===requestVersion)main.innerHTML=route==='community'?demoOffline():errorPanel(error.message);}
   }
-  function pageHeader(){return `<section class="page-heading community-hero"><div><div class="eyebrow">${icon('pin',15)} BRISBANE COMMUNITY</div><h1>Find a local family club.</h1><p class="intro">Browse by suburb or interest, then join the conversation.</p></div><button class="button primary" data-social="create-club">${icon('plus',17)} Create a club</button></section>`;}
+  function demoSection(){return `<section class="demo-community-section" aria-label="Draft community previews"><div class="demo-community-heading"><div><span class="sidebar-kicker">TRADESHOW PREVIEW</span><h2>See how local clubs could begin.</h2><p>These are sample setups, not active clubs or real memberships.</p></div></div><div class="club-grid demo-club-grid">${demoClubs.map(c=>`<article class="club-card demo-club-card"><div class="club-cover ${c.color}"><span class="club-glyph">${icon(c.glyph,29)}</span><span class="club-location">${icon('pin',13)} ${e(c.suburb)}</span></div><div class="club-body"><span class="demo-label">Draft club</span><h3>${e(c.name)}</h3><p>${e(c.description)}</p><div class="club-tags">${c.interests.map(i=>`<span class="tag">${e(i)}</span>`).join('')}</div><button class="button small" data-demo-club="${e(c.id)}">Preview setup ${icon('arrow',14)}</button></div></article>`).join('')}</div></section>`;}
+  function demoOffline(){return `<section class="page-heading community-hero"><div><div class="eyebrow">BRISBANE COMMUNITY</div><h1>Find your people close to home.</h1><p class="intro">Explore how neighbourhood clubs could look.</p></div></section><p class="inline-notice">Live community data is unavailable right now. The draft previews below still show the tradeshow setup.</p>${demoSection()}`;}
+  function pageHeader(){return `<section class="page-heading community-hero"><div><div class="eyebrow">${icon('pin',15)} BRISBANE COMMUNITY</div><h1>Find your people close to home.</h1><p class="intro">Browse neighbourhood clubs, share an activity, and make plans together.</p></div><div class="community-hero-actions"><button class="button" data-social="share-activity">${icon('plus',17)} Share an activity</button><button class="button primary" data-social="create-club">Create a club</button></div></section>`;}
   function communityChrome(){return `${pageHeader()}<div class="section-tabs" role="group" aria-label="Community sections">${[['discover','Discover clubs'],['discussions','Discussions'],['mine','My clubs']].map(([id,label])=>`<button class="${section===id?'active':''}" data-community-section="${id}" aria-pressed="${section===id}">${label}</button>`).join('')}</div><div class="community-layout"><section><div class="search-row"><label class="search-field"><span>${icon('search',18)}</span><input type="search" id="club-search" placeholder="${section==='discussions'?'Find a conversation':'Search clubs, suburbs or interests'}" aria-label="Search community" value="${e(search)}"></label>${section!=='discussions'?`<select id="club-suburb" aria-label="Filter clubs by suburb"><option value="">All suburbs</option>${[...new Set(clubs.map(c=>c.suburb))].sort().map(s=>`<option ${s===suburb?'selected':''}>${e(s)}</option>`).join('')}</select>`:''}</div><div id="community-results"></div></section><aside class="community-sidebar"><section class="sidebar-panel shaded"><span class="sidebar-kicker">START A CLUB</span><h2>Bring local families together.</h2><p>Choose a suburb and shared interest.</p><button class="button" data-social="create-club">Create a club ${icon('arrow',16)}</button></section><section class="sidebar-panel"><h2>Browse interests</h2><div class="club-tags">${interests.map(i=>`<button class="tag interest-tag ${interest===i?'selected':''}" data-interest="${e(i)}">${e(i)}</button>`).join('')}</div></section><section class="sidebar-panel"><h2>Community basics</h2><ol class="guidelines"><li>Be kind and welcoming.</li><li>Keep children’s details private.</li><li>Meet in public places.</li></ol></section></aside></div>`;}
   function paintCommunity(){main.innerHTML=communityChrome();paintResults();}
   function paintResults(){const container=document.querySelector('#community-results');if(!container)return;
@@ -154,7 +203,7 @@ const Social = (() => {
       container.innerHTML=`<div class="topic-tabs" role="group" aria-label="Discussion topic"><button class="topic-tab ${!topic?'active':''}" data-social-topic="">All</button>${topics.map(t=>`<button class="topic-tab ${t===topic?'active':''}" data-social-topic="${e(t)}">${t}</button>`).join('')}</div><div class="feed-heading"><p>${list.length} ${list.length===1?'conversation':'conversations'}</p><button class="button small" data-social="compose">${icon('plus',15)} Start a discussion</button></div>${list.map(postCard).join('')||empty('Start a conversation. Make a connection.','Ask for a local tip, share a find or offer a helping hand.','Start a discussion','compose')}`;
     }else{
       const list=clubs.filter(c=>(section!=='mine'||c.joined)&&(!suburb||c.suburb===suburb)&&(!interest||c.interests.includes(interest))&&`${c.name} ${c.description} ${c.suburb} ${c.interests.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
-      container.innerHTML=`<div class="feed-heading"><p>${section==='mine'?'Your clubs':`${list.length} ${list.length===1?'club':'clubs'} to explore`}${interest?` · ${e(interest)} <button class="plain-button" data-interest="">Clear</button>`:''}</p></div>${list.length?`<div class="club-grid">${list.map(clubCard).join('')}</div>`:section==='mine'&&!profile()?empty('Your people are waiting.','Join Family Finds to keep your clubs in one place.','Join Family Finds','register'):clubs.length||search||suburb||interest?empty('No clubs here just yet.','Try another suburb or interest, or be the person who brings everyone together.','Create a club','create-club'):`${empty('Your neighbourhood starts with you.','Create the first club around a shared interest. Invite a few neighbours and let the good things grow.','Create a club','create-club')}<div class="section-heading"><h2>A little inspiration</h2></div><div class="club-grid inspiration-grid">${[['Weekend explorers','Outdoor play','green','leaf'],['Little makers','Arts & crafts','purple','art'],['Books & little friends','Books & stories','orange','book']].map(([name,i,color,glyph])=>`<article class="club-card"><div class="club-cover ${color}"><span class="club-glyph">${icon(glyph,29)}</span></div><div class="club-body"><h3>${name}</h3><p>A shared interest to build a new club around.</p><button class="text-link plain-button" data-club-idea="${e(name)}" data-idea-interest="${e(i)}">Start this kind of club ${icon('arrow',15)}</button></div></article>`).join('')}</div>`}`;
+      container.innerHTML=`${section==='discover'&&!search&&!suburb&&!interest?demoSection():''}<div class="feed-heading"><p>${section==='mine'?'Your clubs':`${list.length} ${list.length===1?'club':'clubs'} to explore`}${interest?` · ${e(interest)} <button class="plain-button" data-interest="">Clear</button>`:''}</p></div>${list.length?`<div class="club-grid">${list.map(clubCard).join('')}</div>`:section==='mine'&&!profile()?empty('Your people are waiting.','Join Family Finds to keep your clubs in one place.','Join Family Finds','register'):clubs.length||search||suburb||interest?empty('No clubs here just yet.','Try another suburb or interest, or be the person who brings everyone together.','Create a club','create-club'):empty('Start a real club when you are ready.','The previews above show possible setups. Create a club to invite members and begin the conversation.','Create a club','create-club')}`;
     }
   }
   function empty(title,body,label,action){return `<div class="empty-state"><div class="empty-icon">${icon('people',35)}</div><h3>${title}</h3><p>${body}</p><button class="button primary" data-social="${action}">${label}</button></div>`;}
@@ -165,9 +214,20 @@ const Social = (() => {
   function chips(name,values,selected=[]){return `<div class="chip-select">${values.map(v=>`<label><input type="checkbox" name="${name}" value="${e(v)}" ${selected.includes(v)?'checked':''}>${e(v)}</label>`).join('')}</div>`;}
   function authPage(page){queueMicrotask(mountGoogleButton);const register=page==='register';return `<div class="auth-layout"><section class="auth-story"><div class="eyebrow">A LITTLE MORE CONNECTED</div><h1>Good finds.<br>Great company.</h1><p>A place for your family to discover more, spend less and feel part of the neighbourhood.</p><ul class="auth-benefits"><li>${icon('calendar',21)} Find affordable things to do together</li><li>${icon('people',21)} Join clubs close to home</li><li>${icon('heart',21)} Give a little help. Get a little support.</li></ul></section><section class="auth-card"><img src="assets/logo.png" alt="Family Finds" width="48" height="48"><h2>${register?'Make yourself at home.':'Welcome back.'}</h2>${connectionError?`<p class="inline-error">${e(connectionError)}</p><button class="button" data-social="retry">Retry connection</button>`:!ready?'<p>Connecting to your account…</p>':profile()?`<p>You’re signed in as ${e(profile().name)}.</p><a href="#community" class="button primary">Explore your community ${icon('arrow',17)}</a>`:register?`<p>Join a community that makes family life a little easier.</p><form id="register-form"><label for="register-name">Your display name</label><input id="register-name" name="name" autocomplete="name" required maxlength="60" placeholder="How should neighbours know you?"><label for="register-email">Email</label><input type="email" id="register-email" name="email" autocomplete="email" required maxlength="254" placeholder="you@example.com"><label for="register-password">Password</label><input type="password" id="register-password" name="password" autocomplete="new-password" required minlength="10" maxlength="128" placeholder="At least 10 characters"><label for="register-suburb">Your suburb</label><input id="register-suburb" name="suburb" autocomplete="address-level2" required maxlength="60" placeholder="e.g. New Farm"><label>Your interests</label>${chips('interests',interests)}<div class="form-error" role="alert"></div><button class="button primary" type="submit">Create my account ${icon('arrow',17)}</button></form>`:`<p>Log in to find your clubs, conversations and saved activities.</p><form id="login-form"><label for="login-email">Email</label><input type="email" id="login-email" name="email" autocomplete="email" required maxlength="254" placeholder="you@example.com"><label for="login-password">Password</label><input type="password" id="login-password" name="password" autocomplete="current-password" required minlength="10" maxlength="128" placeholder="Your password"><div class="form-error" role="alert"></div><button class="button primary" type="submit">Log in ${icon('arrow',17)}</button></form>`}${ready&&!connectionError&&!profile()?'<div class="auth-divider"><span>or</span></div><div id="google-signin" class="google-signin"></div><p id="google-signin-status" class="auth-google-status" role="status" aria-live="polite">Loading Google sign-in…</p>':''}<p class="auth-small">${register?'Already part of the community? <a class="text-link" href="#login">Log in</a>':'New to Family Finds? <a class="text-link" href="#register">Join us</a>'}</p></section></div>`;}
   function profilePage(data,own){const p=data.profile;const joined=clubs.filter(c=>data.clubs.some(m=>m.id===c.id));return `<a class="back-link" href="#community">${icon('back',16)} Community</a><div class="profile-layout"><aside class="profile-card"><div class="avatar large">${e(initials(p.name))}</div><h1>${e(p.name)}</h1>${p.suburb?`<p>${icon('pin',15)} ${e(p.suburb)}</p>`:''}<p>${e(p.bio)||'Part of the Family Finds community.'}</p><div class="club-tags">${p.interests.map(i=>`<span class="tag">${e(i)}</span>`).join('')}</div>${own?'<a class="button" href="#edit-profile">Edit profile</a>':''}</aside><section><div class="section-heading no-margin"><h2>${own?'Your':'Community'} clubs</h2>${own?'<button class="text-link plain-button" data-social="create-club">Create a club</button>':''}</div><div style="height:22px"></div>${joined.length?`<div class="club-grid">${joined.map(clubCard).join('')}</div>`:empty(own?'Find a club that feels like you.':'No clubs to show yet.',own?'Explore clubs by suburb and interest, or start one of your own.':'This member has not joined a club yet.','Explore clubs','explore')}</section></div>`;}
-  function settingsPage(){const p=profile();return `<div class="page-heading"><div><div class="eyebrow">PROFILE & PRIVACY</div><h1>Your settings.</h1><p class="intro">Choose what neighbours can see.</p></div></div><div class="settings-layout"><nav class="setting-nav" aria-label="Account"><a href="#edit-profile" class="active">Profile & privacy</a><a href="#profile">View profile</a></nav><section class="form-panel"><h2>Profile details</h2><p class="subtle">Your email stays private. Share only what you’re comfortable with.</p><form id="settings-form"><div class="form-grid"><div class="form-field"><label for="settings-name">Display name</label><input id="settings-name" name="name" required maxlength="60" autocomplete="name" value="${e(p.name)}"></div><div class="form-field"><label for="settings-suburb">Suburb</label><input id="settings-suburb" name="suburb" required maxlength="60" autocomplete="address-level2" value="${e(p.suburb)}"></div><div class="form-field full"><label for="settings-bio">A little about you</label><textarea id="settings-bio" name="bio" maxlength="500" placeholder="A few things your family enjoys…">${e(p.bio)}</textarea></div><div class="form-field full"><label>Interests</label>${chips('interests',interests,p.interests)}</div><div class="form-field full"><label>Family age groups · optional</label>${chips('ages',ageGroups,p.ages)}<p class="help-text">General age groups only. These are private to your account.</p></div></div><div class="setting-row"><div><strong>Show my suburb</strong><p>Let other members see your suburb on your profile and posts.</p></div><input type="checkbox" name="showSuburb" aria-label="Show my suburb" ${p.showSuburb?'checked':''}></div><div class="setting-row"><div><strong>Show my interests</strong><p>Help neighbours spot the things you have in common.</p></div><input type="checkbox" name="showInterests" aria-label="Show my interests" ${p.showInterests?'checked':''}></div><div class="setting-row"><div><strong>Account email</strong><p>${e(p.email)}</p></div><span class="tag">Family Finds account</span></div><div class="form-error" role="alert"></div><div class="form-actions"><button class="button primary" type="submit">Save changes</button></div></form></section></div>`;}
+  function settingsPage(){
+    const p=profile();
+    return `<div class="page-heading"><div><div class="eyebrow">YOUR ACCOUNT</div><h1>Account settings.</h1><p class="intro">Manage your profile and what other families can see.</p></div></div><div class="settings-layout"><nav class="setting-nav" aria-label="Account"><a href="#settings" class="active" aria-current="page">Overview</a><a href="#edit-profile">Profile & privacy</a><a href="#profile">View profile</a></nav><section class="form-panel account-settings-panel"><h2>Your account</h2><div class="setting-row"><div><strong>Profile & privacy</strong><p>Update your name, suburb, interests and visibility choices.</p></div><a class="button" href="#edit-profile">Edit profile</a></div><div class="setting-row"><div><strong>View your profile</strong><p>See how your profile appears on Family Finds.</p></div><a class="button" href="#profile">View profile</a></div><div class="setting-row"><div><strong>Account email</strong><p>${e(p.email)}</p></div></div></section></div>`;
+  }
+  function editProfilePage(){const p=profile();return `<div class="page-heading"><div><div class="eyebrow">PROFILE & PRIVACY</div><h1>Edit your profile.</h1><p class="intro">Choose what neighbours can see.</p></div></div><div class="settings-layout"><nav class="setting-nav" aria-label="Account"><a href="#settings">Overview</a><a href="#edit-profile" class="active" aria-current="page">Profile & privacy</a><a href="#profile">View profile</a></nav><section class="form-panel"><h2>Profile details</h2><p class="subtle">Your email stays private. Share only what you’re comfortable with.</p><form id="settings-form"><div class="form-grid"><div class="form-field"><label for="settings-name">Display name</label><input id="settings-name" name="name" required maxlength="60" autocomplete="name" value="${e(p.name)}"></div><div class="form-field"><label for="settings-suburb">Suburb</label><input id="settings-suburb" name="suburb" required maxlength="60" autocomplete="address-level2" value="${e(p.suburb)}"></div><div class="form-field full"><label for="settings-bio">A little about you</label><textarea id="settings-bio" name="bio" maxlength="500" placeholder="A few things your family enjoys…">${e(p.bio)}</textarea></div><div class="form-field full"><label>Interests</label>${chips('interests',interests,p.interests)}</div><div class="form-field full"><label>Family age groups · optional</label>${chips('ages',ageGroups,p.ages)}<p class="help-text">General age groups only. These are private to your account.</p></div></div><div class="setting-row"><div><strong>Show my suburb</strong><p>Let other members see your suburb on your profile and posts.</p></div><input type="checkbox" name="showSuburb" aria-label="Show my suburb" ${p.showSuburb?'checked':''}></div><div class="setting-row"><div><strong>Show my interests</strong><p>Help neighbours spot the things you have in common.</p></div><input type="checkbox" name="showInterests" aria-label="Show my interests" ${p.showInterests?'checked':''}></div><div class="setting-row"><div><strong>Account email</strong><p>${e(p.email)}</p></div><span class="tag">Family Finds account</span></div><div class="form-error" role="alert"></div><div class="form-actions"><button class="button primary" type="submit">Save changes</button></div></form></section></div>`;}
   function clubForm(value={}){return `<div class="eyebrow">A SPACE FOR YOUR PEOPLE</div><h2 id="modal-title">${value.id?'Manage your club.':'Start something local.'}</h2><p class="subtle">Bring families together around a suburb, a shared interest, or a regular activity.</p><form id="club-form" data-id="${value.id||''}"><label for="club-name">Club name</label><input id="club-name" name="name" required maxlength="80" value="${e(value.name||'')}" placeholder="e.g. New Farm weekend explorers"><label for="club-home">Suburb</label><input id="club-home" name="suburb" required maxlength="60" value="${e(value.suburb||profile()?.suburb||'')}" placeholder="Where is your club based?"><label for="club-description">What brings you together?</label><textarea id="club-description" name="description" required maxlength="1000" placeholder="Tell families what your club is about and who is welcome.">${e(value.description||'')}</textarea><label>Shared interests</label>${chips('interests',interests,value.interests||[])}<label>Suitable age groups</label>${chips('ages',ageGroups,value.ages||[])}<label for="club-facebook">Facebook or Messenger link · optional</label><input type="url" id="club-facebook" name="facebookUrl" maxlength="1500" placeholder="https://www.facebook.com/groups/…" value="${e(value.facebook_url||'')}"><p class="subtle">Your club works here with or without Facebook.</p><label for="club-color">Club colour</label><select id="club-color" name="color">${[['blue','Sky blue'],['green','Garden green'],['purple','Soft violet'],['orange','Warm apricot']].map(([id,name])=>`<option value="${id}" ${value.color===id?'selected':''}>${name}</option>`).join('')}</select><div class="form-error" role="alert"></div><div class="form-actions"><button class="button" type="button" data-close>Cancel</button><button class="button primary" type="submit">${value.id?'Save changes':'Create club'}</button></div></form>`;}
   async function compose(prefill={}){if(!requireProfile())return;try{const c=await api('/clubs');clubs=c.clubs;const selected=route==='club'?club?.id:'';showDialog(`<div class="eyebrow">SOMETHING TO SHARE</div><h2 id="modal-title">Start a conversation.</h2><form id="discussion-form"><label for="discussion-club">Where would you like to post?</label><select id="discussion-club" name="clubId"><option value="">Brisbane community</option>${clubs.filter(c=>c.joined).map(c=>`<option value="${c.id}" ${selected===c.id?'selected':''}>${e(c.name)}</option>`).join('')}</select><label for="discussion-topic">Topic</label><select id="discussion-topic" name="topic">${topics.map(t=>`<option>${t}</option>`).join('')}</select><label for="discussion-title">Title</label><input id="discussion-title" name="title" required maxlength="120" placeholder="Give your neighbours a little context" value="${e(prefill.title||'')}"><label for="discussion-body">Your message</label><textarea id="discussion-body" name="body" required maxlength="4000" placeholder="Share a find, make a plan, ask a question…">${e(prefill.body||'')}</textarea><label for="discussion-link">Share a link · optional</label><input type="url" id="discussion-link" name="link" placeholder="https://…" value="${e(prefill.link||'')}" maxlength="1500"><div class="form-error" role="alert"></div><div class="form-actions"><button class="button" type="button" data-close>Cancel</button><button class="button primary" type="submit">Post discussion</button></div></form>`);}catch(error){notify(error.message);}}
+  async function shareActivity(){
+    if(!requireProfile())return;
+    try{
+      const data=await api('/clubs');clubs=data.clubs;
+      showDialog(`<div class="eyebrow">COMMUNITY ACTIVITY</div><h2 id="modal-title">Share an activity</h2><p class="subtle">Suggest something for local families. This creates a community post, not an official Council event listing.</p><form id="activity-form"><label for="activity-club">Share with</label><select id="activity-club" name="clubId"><option value="">Brisbane community</option>${clubs.filter(c=>c.joined).map(c=>`<option value="${e(c.id)}">${e(c.name)}</option>`).join('')}</select><label for="activity-title">Activity name</label><input id="activity-title" name="title" required maxlength="120" placeholder="e.g. Saturday park picnic"><label for="activity-date">Date</label><input id="activity-date" type="date" name="date" required><label for="activity-place">Place</label><input id="activity-place" name="place" required maxlength="160" placeholder="Park, library or suburb"><label for="activity-description">What should families know?</label><textarea id="activity-description" name="description" required maxlength="3000" placeholder="Include time, ages, cost and any booking instructions."></textarea><label for="activity-link">More information or booking link · optional</label><input id="activity-link" type="url" name="link" maxlength="1500" placeholder="https://…"><div class="form-error" role="alert"></div><div class="form-actions"><button class="button" type="button" data-close>Cancel</button><button class="button primary" type="submit">Post activity</button></div></form>`);
+    }catch(error){notify(error.message);}
+  }
   function postPage(data){const p=data.post;const mine=p.author_id===profile()?.id;return `<a class="back-link" href="${p.club_id?'#club/'+p.club_id:'#community'}">${icon('back',16)} ${p.club_id?'Back to club':'Community'}</a><div class="thread-wrap"><article class="post-card"><div class="post-top"><a href="#member/${p.author_id}" class="avatar">${e(initials(p.author))}</a><div><a class="author" href="#member/${p.author_id}">${e(p.author)}</a><div class="post-time">${ago(p.created_at)}</div></div><span class="topic-badge">${e(p.topic)}</span></div><h1 class="thread-title">${e(p.title)}</h1><p class="post-body">${e(p.body)}</p>${p.link?`<a class="text-link" href="${e(p.link)}" target="_blank" rel="noopener noreferrer">Open shared link ${icon('external',16)}</a>`:''}<div class="post-actions"><button data-share-post="${p.id}">${icon('share',17)} Share discussion</button>${mine?`<button data-delete-post="${p.id}">Remove discussion</button>`:''}</div></article><section class="form-panel"><h2>${data.replies.length} ${data.replies.length===1?'reply':'replies'}</h2>${data.replies.map(r=>`<article class="reply"><a href="#member/${r.author_id}"><strong>${e(r.author)}</strong></a><span class="post-time"> · ${ago(r.created_at)}</span><p>${e(r.body)}</p></article>`).join('')||'<p class="subtle">A friendly hello can go a long way. Be the first to reply.</p>'}${profile()?`<form id="club-reply-form" data-id="${p.id}"><label for="thread-reply">Join the conversation</label><textarea id="thread-reply" name="body" required maxlength="2000" placeholder="Write a thoughtful reply…"></textarea><div class="form-error" role="alert"></div><div class="form-actions"><button class="button primary" type="submit">Post reply</button></div></form>`:'<a class="button primary" href="#login">Log in to reply</a>'}</section></div>`;}
   async function share(hash){const url=`${location.origin}/${hash}`;try{await navigator.clipboard.writeText(url);notify('Link copied. Share it with your community.');}catch{showDialog(`<h2 id="modal-title">Share this link</h2><label for="share-link">Copy the link below</label><input id="share-link" readonly value="${e(url)}"><p class="subtle">People need access to Family Finds. Club discussions also require club membership.</p>`);document.querySelector('#share-link').select();}}
   async function action(name){
@@ -175,6 +235,7 @@ const Social = (() => {
     if(name==='retry'){ready=false;connectionError='';render();return init();}
     if(name==='logout'){window.google?.accounts?.id?.disableAutoSelect();try{await api('/auth/logout',{method:'POST'});}finally{localStorage.removeItem(sessionKey);me={signedIn:false,email:'',profile:null};saved=[];interestByEvent={};updateCount();accountHeader();navigate('home');notify('You’re logged out.');}return;}
     if(name==='create-club'){if(requireProfile())showDialog(clubForm());return;}
+    if(name==='share-activity')return shareActivity();
     if(name==='edit-club'){if(requireProfile()&&club?.isOwner)showDialog(clubForm(club));return;}
     if(name==='compose')return compose();
     if(name==='join-club'){if(!requireProfile())return;await api(`/clubs/${club.id}/membership`,{method:'POST'});notify('Welcome to the club.');return render();}
@@ -182,6 +243,7 @@ const Social = (() => {
     if(name==='confirm-leave'){await api(`/clubs/${club.id}/membership`,{method:'DELETE'});modal.close();notify('You left the club.');render();}
   }
   document.addEventListener('click',async event=>{const target=event.target.closest('button,[data-open-post]');if(!target)return;try{
+    if(target.hasAttribute('data-demo-club')){const draft=demoClubs.find(c=>c.id===target.dataset.demoClub);if(draft)showDialog(`<div class="eyebrow">DRAFT CLUB · TRADESHOW PREVIEW</div><h2 id="modal-title">${e(draft.name)}</h2><p>${e(draft.description)}</p><p><strong>Neighbourhood:</strong> ${e(draft.suburb)}</p><p><strong>First step:</strong> ${e(draft.plan)}</p><p class="subtle">This preview has no members or posts yet. Create a real club to invite families.</p><div class="form-actions"><button class="button" data-close>Close</button><button class="button primary" data-social="create-club">Create a real club</button></div>`);return;}
     if(target.dataset.social)await action(target.dataset.social);
     if(target.hasAttribute('data-community-section')){section=target.dataset.communitySection;search='';interest='';paintCommunity();}
     if(target.hasAttribute('data-interest')){interest=interest===target.dataset.interest?'':target.dataset.interest;section='discover';paintCommunity();}
@@ -196,9 +258,18 @@ const Social = (() => {
     if(target.hasAttribute('data-confirm-delete')){await api(`/posts/${target.dataset.confirmDelete}`,{method:'DELETE'});modal.close();notify('Discussion removed.');navigate('community');}
   }catch(error){notify(error.message);target.disabled=false;}});
   document.addEventListener('input',event=>{if(event.target.id==='club-search'){search=event.target.value;paintResults();}});
-  document.addEventListener('change',event=>{if(event.target.id==='club-suburb'){suburb=event.target.value;paintResults();}});
+  document.addEventListener('focusin',event=>{
+    if(event.target.matches('input[name="suburb"]')) attachSuburbList(event.target);
+  });
+  document.addEventListener('change',event=>{
+    if(event.target.id==='club-suburb'){suburb=event.target.value;paintResults();}
+    if(event.target.matches('input[name="suburb"]')) event.target.value=formatSuburb(event.target.value);
+  });
   document.addEventListener('submit',async event=>{
-    const form=event.target;if(!['register-form','login-form','settings-form','club-form','discussion-form','club-reply-form'].includes(form.id))return;event.preventDefault();const d=new FormData(form),b=Object.fromEntries(d);const button=form.querySelector('button[type=submit]');const feedback=form.querySelector('.form-error');
+    const form=event.target;if(!['register-form','login-form','settings-form','club-form','discussion-form','activity-form','club-reply-form'].includes(form.id))return;event.preventDefault();
+    const suburbInput=form.querySelector('input[name="suburb"]');
+    if(suburbInput) suburbInput.value=formatSuburb(suburbInput.value);
+    const d=new FormData(form),b=Object.fromEntries(d);const button=form.querySelector('button[type=submit]');const feedback=form.querySelector('.form-error');
     if([...form.querySelectorAll('[required]')].some(field=>!field.value.trim())){feedback.innerHTML='<p class="inline-error">Please fill in the required fields.</p>';return;}
     button.disabled=true;feedback.textContent='';
     try{
@@ -207,6 +278,7 @@ const Social = (() => {
       if(form.id==='settings-form'){const result=await api('/profile',{method:'PATCH',body:JSON.stringify({...b,interests:d.getAll('interests'),ages:d.getAll('ages'),showSuburb:d.has('showSuburb'),showInterests:d.has('showInterests')})});me.profile=result.profile;accountHeader();notify('Your profile and privacy settings are saved.');}
       if(form.id==='club-form'){const id=form.dataset.id;const result=await api(id?`/clubs/${id}`:'/clubs',{method:id?'PATCH':'POST',body:JSON.stringify({...b,interests:d.getAll('interests'),ages:d.getAll('ages')})});modal.close();clubTab='discussions';notify(id?'Club updated.':'Your club is ready. Invite your neighbours!');navigate('club/'+result.club.id);}
       if(form.id==='discussion-form'){const result=await api('/posts',{method:'POST',body:JSON.stringify(b)});modal.close();notify('Discussion posted.');navigate('post/'+result.id);}
+      if(form.id==='activity-form'){const [year,month,day]=b.date.split('-');const body=`When: ${day}/${month}/${year}\nWhere: ${b.place.trim()}\n\n${b.description.trim()}`;const result=await api('/posts',{method:'POST',body:JSON.stringify({clubId:b.clubId,title:b.title,body,topic:'Meetups',link:b.link})});modal.close();notify('Activity shared with the community.');navigate('post/'+result.id);}
       if(form.id==='club-reply-form'){await api(`/posts/${form.dataset.id}/replies`,{method:'POST',body:JSON.stringify(b)});notify('Your reply is posted.');render();}
     }catch(error){feedback.innerHTML=`<p class="inline-error">${e(error.message)}</p>`;}finally{button.disabled=false;}
   });
