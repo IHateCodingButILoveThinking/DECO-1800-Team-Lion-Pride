@@ -1005,6 +1005,10 @@ body.events-route .event-filter-panel .active-filter-list { margin-top: 12px; }
 .event-card-open:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
 .event-card .save-button { z-index: 2; }
 .event-card .card-booking-link { position: relative; z-index: 2; }
+.event-detail-modal .event-detail-save { right: 57px; top: 14px; width: 30px; height: 30px; background: #eaf1e8; color: var(--blue); }
+.event-detail-modal .event-detail-save[aria-pressed="true"] { background: #eaf1e8; }
+.account-settings-panel .setting-row { flex-wrap: wrap; gap: 12px; }
+.account-settings-panel .setting-row .button { flex-shrink: 0; }
 
 @media (max-width: 1000px) {
   body.events-route .event-filter-panel .event-more-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
