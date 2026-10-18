@@ -359,7 +359,10 @@ async function handleRequest(request, env) {
   if (!db) fail(503, 'Community is temporarily unavailable. Please try again shortly.');
   const path = url.pathname;
   const method = request.method;
-  if (path === '/api/health' && method === 'GET') return json({ok: true, service: 'family-finds-api'});
+  if (path === '/api/health' && method === 'GET') {
+    const approvalTable = await first(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='club_join_requests'");
+    return json({ok: true, service: 'family-finds-api', features: {clubApproval: !!approvalTable}});
+  }
   if (path === '/api/auth/google' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return googleAccount(request, env); }
   if (path === '/api/auth/register' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return registerAccount(request, env); }
   if (path === '/api/auth/login' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return loginAccount(request, env); }

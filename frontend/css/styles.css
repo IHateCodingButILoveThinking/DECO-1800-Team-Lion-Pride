@@ -1038,6 +1038,46 @@ body.events-route .event-filter-panel .active-filter-list { margin-top: 12px; }
 @media (max-width: 760px) { .header-account .account-name { max-width: 100px; } .account-settings-link { width: 32px; height: 32px; } }
 @media (max-width: 470px) { .header-account .account-name { display: none !important; } .moderation-row { align-items: flex-start; flex-direction: column; } }
 
+/* Keep club discovery and club pages focused on their main action. */
+.community-route .community-hero { padding: 4px 0 12px; margin-bottom: 12px; }
+.community-route .community-hero h1 { font-family: Georgia, 'Times New Roman', serif; font-weight: 500; font-size: clamp(2.2rem, 4vw, 3.3rem); letter-spacing: -.045em; margin-bottom: 9px; }
+.community-route .community-hero .intro { font-size: .96rem; }
+.community-route .section-tabs { margin-bottom: 16px; }
+.community-route .community-rules-banner { margin: 0 0 22px; padding: 10px 14px; border-radius: 10px; font-size: .8rem; }
+.community-discover { min-width: 0; }
+.community-search-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 13px; }
+.community-search-bar .search-field { flex: 1; }
+.community-search-bar input, .community-search-bar select { min-height: 46px; }
+.community-search-bar select { width: 175px; }
+.community-interest-filter { display: flex; gap: 7px; overflow-x: auto; padding: 2px 0 8px; scrollbar-width: thin; }
+.community-interest-filter .tag { flex: 0 0 auto; white-space: nowrap; padding: 8px 12px; }
+.community-route .community-discover .club-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.community-route .community-discover .club-card { border: 1px solid #e8e5dc; border-radius: 16px; }
+.community-route .community-discover .club-cover { height: 94px; }
+.community-route .community-discover .club-body { padding: 18px; }
+.community-route .community-discover .club-body p { min-height: 2.7em; margin-bottom: 12px; }
+.community-route .community-discover .post-card { max-width: 860px; }
+.club-detail-head { padding: 28px 32px; margin-bottom: 16px; }
+.club-detail-head h1 { margin-bottom: 12px; }
+.club-detail-kicker { color: #346e55; font-size: .76rem; font-weight: 700; letter-spacing: .03em; margin-bottom: 9px; }
+.club-detail-kicker span { color: #a1aaa0; margin: 0 5px; }
+.club-detail-description { margin-bottom: 13px; }
+.club-detail-head .club-detail-meta { margin-bottom: 13px; }
+.club-detail-head .club-head-actions { margin-top: 18px; }
+.club-detail-body { max-width: 900px; }
+.club-detail-body .form-panel { max-width: none; }
+.club-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.club-form-grid > div { min-width: 0; }
+.club-form-options { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 15px; }
+.club-form-options summary { cursor: pointer; color: #346e55; font-size: .85rem; font-weight: 700; }
+.club-form-options[open] { padding-bottom: 8px; }
+.club-privacy-option span { display: block; }
+.invite-link-row { display: flex; gap: 9px; margin-top: 8px; }
+.invite-link-row input { flex: 1; min-width: 0; border-radius: 10px; }
+.invite-link-row .button { flex: 0 0 auto; }
+@media (max-width: 950px) { .community-route .community-discover .club-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .community-route .community-discover .club-grid, .club-form-grid { grid-template-columns: 1fr; } .community-search-bar { flex-wrap: wrap; } .community-search-bar .search-field { flex-basis: 100%; } .community-search-bar select { width: 100%; } .invite-link-row { flex-direction: column; } .club-detail-head { padding: 24px 21px; } }
+
 @media (max-width: 1000px) {
   body.events-route .event-filter-panel .event-more-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .home-route .event-grid { grid-template-columns: 1fr; }

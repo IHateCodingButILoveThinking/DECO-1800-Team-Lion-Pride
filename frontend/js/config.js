@@ -2,5 +2,6 @@
 const familyFindsLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
 window.FAMILY_FINDS_CONFIG = {
   googleClientId: '270648649859-sa2p5jdcm7taenr2rdq653kvoq3f0mb2.apps.googleusercontent.com',
+  publicSiteUrl: 'https://deco1800teams-lion-pride.uqcloud.net/index.html',
   apiOrigin: familyFindsLocal ? 'http://127.0.0.1:8787' : 'https://family-finds-api.zeyi-yang.workers.dev'
 };

@@ -310,6 +310,8 @@ The website saves accounts, profiles, clubs, memberships, join requests, club bl
 
 Event cards show interested adults only when they share at least one club with the signed-in member. The API does not expose emails, children's names, private age settings or people outside the member's clubs. Club discussions and member lists require membership. Private club requests require owner approval; club owners can block members, removing access and preventing new requests. Creating or joining a club requires agreement to the community rules. User-entered text is escaped in the interface, links require HTTPS, and optional Facebook links are restricted to Facebook or Messenger hosts.
 
+New clubs default to owner-approved membership. After creating a club, its detail page has an **Invite link** button. The link opens that club directly; it does not bypass sign-in or owner approval. Clubs also appear under Community → Discover, where families can find them by suburb or interest. Club creation checks the Worker's approval feature before submitting, so an older deployed API cannot silently create an open club.
+
 The council feed is a rolling extract of published events. Each activity shows one clear next step: the organiser's booking link when available, or the official Council listing for details.
 
 ## Google sign-in

@@ -36,6 +36,9 @@ test('starter clubs, owner approval, club blocks and account changes', async () 
     return {status: response.status, data: await response.json()};
   }
   try {
+    const health = await request('/health');
+    assert.equal(health.status, 200);
+    assert.equal(health.data.features.clubApproval, true);
     const starters = await request('/clubs');
     assert.equal(starters.status, 200);
     assert.equal(starters.data.clubs.filter(club => club.is_starter).length, 3);
@@ -54,6 +57,8 @@ test('starter clubs, owner approval, club blocks and account changes', async () 
     assert.equal(created.status, 201);
     const id = created.data.club.id;
     assert.equal(created.data.club.is_private, true);
+    assert.equal((await request(`/clubs/${id}`, 'GET', undefined, owner.token)).data.club.isOwner, true);
+    assert.equal((await request('/clubs', 'GET', undefined, member.token)).data.clubs.some(club => club.id === id), true);
     const post = await request('/posts', 'POST', {clubId: id, title: 'Saturday walk', body: 'Meet at the park.', topic: 'Meetups'}, owner.token);
     assert.equal(post.status, 201);
     assert.equal((await request(`/profiles/${owner.profile.id}`, 'GET', undefined, outsider.token)).data.clubs.some(club => club.id === id), false);
