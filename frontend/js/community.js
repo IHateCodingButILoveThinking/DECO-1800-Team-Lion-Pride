@@ -14,6 +14,7 @@ const Social = (() => {
   let requestVersion = 0;
   const apiOrigin = String(window.FAMILY_FINDS_CONFIG?.apiOrigin || '').replace(/\/$/, '');
   const sessionKey = 'family_finds_session';
+  const pendingInviteKey = 'family_finds_pending_club_invite';
   const e = value => escapeHTML(value);
   // Keep a useful offline list; Council event locations add more suggestions when available.
   const suburbSuggestions = new Set([
@@ -133,7 +134,7 @@ const Social = (() => {
       try{const data=await api('/saved');saved=data.events;await refreshEventInterest();}catch{notify('Signed in. Saved activities could not be loaded yet.');}
       updateCount();accountHeader();
       notify(result.created?'Welcome! You can add your suburb and interests in Edit profile.':'Welcome back.');
-      navigate(result.created?'edit-profile':'community');
+      inviteDestination(result.created?'edit-profile':'community');
     }catch(error){if(status?.isConnected)status.textContent=error.message;else notify(error.message);}
     finally{googleBusy=false;}
   }
@@ -192,17 +193,21 @@ const Social = (() => {
         if(club.joined){const data=await api(`/clubs/${club.id}/members`);if(version!==requestVersion)return;members=data.members;}
         if(club.isOwner){const [requests,blocks]=await Promise.allSettled([api(`/clubs/${club.id}/requests`),api(`/clubs/${club.id}/blocks`)]);if(version!==requestVersion)return;joinRequests=requests.status==='fulfilled'?requests.value.requests:[];blockedMembers=blocks.status==='fulfilled'?blocks.value.members:[];}
         main.innerHTML=clubPage();
+        if(sessionStorage.getItem(pendingInviteKey)===club.id){
+          sessionStorage.removeItem(pendingInviteKey);
+          if(profile()&&!club.joined&&!club.requested)await action('join-club');
+        }
       }else if(route==='profile'||route==='member'){
         if(!profile()){main.innerHTML=authPage('login');return;}
         const id=route==='member'?location.hash.split('/')[1]:profile().id;const [data,c]=await Promise.all([api(`/profiles/${encodeURIComponent(id)}`),api('/clubs')]);if(version!==requestVersion)return;clubs=c.clubs;main.innerHTML=profilePage(data,route==='profile');
       }else if(route==='post'){
         const data=await api(`/posts/${encodeURIComponent(location.hash.split('/')[1])}`);if(version!==requestVersion)return;main.innerHTML=postPage(data);
       }
-    }catch(error){if(version===requestVersion)main.innerHTML=route==='community'?demoOffline():errorPanel(error.message);}
+    }catch(error){if(version===requestVersion){if(route==='club'&&sessionStorage.getItem(pendingInviteKey)===location.hash.split('/')[1])sessionStorage.removeItem(pendingInviteKey);main.innerHTML=route==='community'?demoOffline():errorPanel(error.message);}}
   }
   function demoSection(){return `<section class="demo-community-section" aria-label="Draft community previews"><div class="demo-community-heading"><div><span class="sidebar-kicker">TRADESHOW PREVIEW</span><h2>Club ideas</h2><p>Examples only · no members yet</p></div></div><div class="club-grid demo-club-grid">${demoClubs.map(c=>`<article class="club-card demo-club-card"><div class="club-cover ${c.color}"><span class="club-glyph">${icon(c.glyph,29)}</span><span class="club-location">${icon('pin',13)} ${e(c.suburb)}</span></div><div class="club-body"><span class="demo-label">Draft club</span><h3>${e(c.name)}</h3><p>${e(c.description)}</p><div class="club-tags">${c.interests.map(i=>`<span class="tag">${e(i)}</span>`).join('')}</div><button class="button small" data-demo-club="${e(c.id)}">Preview setup ${icon('arrow',14)}</button></div></article>`).join('')}</div></section>`;}
   function demoOffline(){return `<section class="page-heading community-hero"><div><div class="eyebrow">BRISBANE COMMUNITY</div><h1>Find your people close to home.</h1><p class="intro">Explore how neighbourhood clubs could look.</p></div></section><p class="inline-notice">Live community data is unavailable right now. The draft previews below still show the tradeshow setup.</p>${demoSection()}`;}
-  function pageHeader(){return `<section class="page-heading community-hero"><h1>${section==='discover'?'Find a family club':section==='mine'?'My clubs':'Discussions'}</h1>${section==='discover'||section==='mine'&&profile()?`<button class="button primary" data-social="create-club">${icon('plus',16)} Start a club</button>`:''}</section>`;}
+  function pageHeader(){return `<section class="page-heading community-hero"><h1>${section==='discover'?'Find a family club':section==='mine'?'My clubs':'Discussions'}</h1>${section==='discover'||section==='mine'?`<div class="community-hero-actions"><button class="button" data-social="enter-invite">Enter invite link</button><button class="button primary" data-social="create-club">${icon('plus',16)} Start a club</button></div>`:''}</section>`;}
   function communityChrome(){
     const suburbOptions=[...new Set(clubs.map(c=>c.suburb))].sort().map(s=>`<option value="${e(s)}" ${s===suburb?'selected':''}>${e(s)}</option>`).join('');
     const filters=Number(!!suburb)+Number(!!interest);
@@ -259,6 +264,22 @@ const Social = (() => {
   }
   function postPage(data){const p=data.post;const mine=p.author_id===profile()?.id;return `<a class="back-link" href="${p.club_id?'#club/'+p.club_id:'#community'}">${icon('back',16)} ${p.club_id?'Back to club':'Community'}</a><div class="thread-wrap"><article class="post-card"><div class="post-top"><a href="#member/${p.author_id}" class="avatar">${e(initials(p.author))}</a><div><a class="author" href="#member/${p.author_id}">${e(p.author)}</a><div class="post-time">${ago(p.created_at)}</div></div><span class="topic-badge">${e(p.topic)}</span></div><h1 class="thread-title">${e(p.title)}</h1><p class="post-body">${e(p.body)}</p>${p.link?`<a class="text-link" href="${e(p.link)}" target="_blank" rel="noopener noreferrer">Open shared link ${icon('external',16)}</a>`:''}<div class="post-actions"><button data-share-post="${p.id}">${icon('share',17)} Share discussion</button>${mine?`<button data-delete-post="${p.id}">Remove discussion</button>`:''}</div></article><section class="form-panel"><h2>${data.replies.length} ${data.replies.length===1?'reply':'replies'}</h2>${data.replies.map(r=>`<article class="reply"><a href="#member/${r.author_id}"><strong>${e(r.author)}</strong></a><span class="post-time"> · ${ago(r.created_at)}</span><p>${e(r.body)}</p></article>`).join('')||'<p class="subtle">A friendly hello can go a long way. Be the first to reply.</p>'}${profile()?`<form id="club-reply-form" data-id="${p.id}"><label for="thread-reply">Join the conversation</label><textarea id="thread-reply" name="body" required maxlength="2000" placeholder="Write a thoughtful reply…"></textarea><div class="form-error" role="alert"></div><div class="form-actions"><button class="button primary" type="submit">Post reply</button></div></form>`:'<a class="button primary" href="#login">Log in to reply</a>'}</section></div>`;}
   function publicLink(hash){const url=new URL(window.FAMILY_FINDS_CONFIG?.publicSiteUrl||location.href);url.hash=hash.replace(/^#/,'');return url.href;}
+  function invitedClubId(value){
+    let url;
+    try{url=new URL(String(value).trim());}catch{throw new Error('Paste a Family Finds club invite link.');}
+    const publicPage=new URL(window.FAMILY_FINDS_CONFIG?.publicSiteUrl||location.href);
+    const currentPage=new URL(location.href);
+    if(![publicPage,currentPage].some(page=>url.origin===page.origin&&url.pathname===page.pathname))throw new Error('Use a Family Finds club invite link.');
+    const match=/^#club\/([^/?#]+)$/.exec(url.hash);
+    let id;
+    try{id=match&&decodeURIComponent(match[1]);}catch{}
+    if(!id||!(/^[a-z0-9-]{1,80}$/i).test(id))throw new Error('This club invite link is invalid.');
+    return id;
+  }
+  function inviteDestination(fallback){
+    const id=sessionStorage.getItem(pendingInviteKey);
+    navigate(id?`club/${encodeURIComponent(id)}`:fallback);
+  }
   function showInvite(id){
     const url=publicLink(`club/${encodeURIComponent(id)}`);
     showDialog(`<div class="eyebrow">SHARE YOUR CLUB</div><h2 id="modal-title">Invite families</h2><p class="subtle">People can also find ${e(club.name)} in Discover.${club.is_private?' The owner approves each request.':' They can join straight away.'}</p><label for="invite-link">Club link</label><div class="invite-link-row"><input id="invite-link" readonly value="${e(url)}"><button class="button primary" type="button" data-copy-invite>Copy link</button></div>`);
@@ -266,6 +287,7 @@ const Social = (() => {
   async function share(hash){const url=publicLink(hash);try{await navigator.clipboard.writeText(url);notify('Link copied.');}catch{showDialog(`<h2 id="modal-title">Share this link</h2><input id="share-link" readonly aria-label="Share link" value="${e(url)}">`);document.querySelector('#share-link').select();}}
   async function action(name){
     if(name==='register')return navigate('register');if(name==='explore'){section='discover';return navigate('community');}
+    if(name==='enter-invite'){showDialog(`<h2 id="modal-title">Join with an invite link</h2><form id="invite-link-form"><label for="club-invite-url">Club invite link</label><input id="club-invite-url" name="inviteUrl" type="url" required autocomplete="off" placeholder="Paste the link someone shared with you"><div class="form-error" role="alert"></div><div class="form-actions"><button class="button" type="button" data-close>Cancel</button><button class="button primary" type="submit">Continue</button></div></form>`);return;}
     if(name==='clear-filters'){search='';suburb='';interest='';filtersOpen=false;paintCommunity();return;}
     if(name==='retry'){ready=false;connectionError='';render();return init();}
     if(name==='logout'){window.google?.accounts?.id?.disableAutoSelect();try{await api('/auth/logout',{method:'POST'});}finally{localStorage.removeItem(sessionKey);me={signedIn:false,email:'',profile:null};saved=[];interestByEvent={};updateCount();accountHeader();navigate('home');notify('You’re logged out.');}return;}
@@ -273,7 +295,7 @@ const Social = (() => {
     if(name==='share-activity')return shareActivity();
     if(name==='edit-club'){if(requireProfile()&&club?.isOwner){if(!await clubServerReady())throw new Error('Club editing is unavailable until the community update is deployed.');showDialog(clubForm(club));}return;}
     if(name==='compose')return compose();
-    if(name==='join-club'){if(!requireProfile())return;showDialog(`<div class="eyebrow">${club.is_private?'PRIVATE CLUB':'COMMUNITY CLUB'}</div><h2 id="modal-title">${club.is_private?'Request to join':'Join'} ${e(club.name)}</h2><p class="subtle">${club.is_private?'The owner will approve your request before you can see members and discussions.':'You can leave this club whenever you like.'}</p><form id="join-club-form">${rulesAgreement()}<div class="form-error" role="alert"></div><div class="form-actions"><button class="button" type="button" data-close>Cancel</button><button class="button primary" type="submit">${club.is_private?'Send request':'Join club'}</button></div></form>`);return;}
+    if(name==='join-club'){if(!profile()&&club?.id)sessionStorage.setItem(pendingInviteKey,club.id);if(!requireProfile())return;showDialog(`<div class="eyebrow">${club.is_private?'PRIVATE CLUB':'COMMUNITY CLUB'}</div><h2 id="modal-title">${club.is_private?'Request to join':'Join'} ${e(club.name)}</h2><p class="subtle">${club.is_private?'The owner will approve your request before you can see members and discussions.':'You can leave this club whenever you like.'}</p><form id="join-club-form">${rulesAgreement()}<div class="form-error" role="alert"></div><div class="form-actions"><button class="button" type="button" data-close>Cancel</button><button class="button primary" type="submit">${club.is_private?'Send request':'Join club'}</button></div></form>`);return;}
     if(name==='cancel-request'){await api(`/clubs/${club.id}/membership`,{method:'DELETE'});notify('Join request cancelled.');return render();}
     if(name==='leave-club'){showDialog(`<h2 id="modal-title">Leave ${e(club.name)}?</h2><p>You can join again later. Your existing discussions and replies will remain in the club.</p><div class="form-actions"><button class="button" data-close>Stay in club</button><button class="button danger" data-social="confirm-leave">Leave club</button></div>`);return;}
     if(name==='confirm-leave'){await api(`/clubs/${club.id}/membership`,{method:'DELETE'});modal.close();notify('You left the club.');render();}
@@ -311,15 +333,16 @@ const Social = (() => {
     if(event.target.matches('input[name="suburb"]')) event.target.value=formatSuburb(event.target.value);
   });
   document.addEventListener('submit',async event=>{
-    const form=event.target;if(!['register-form','login-form','settings-form','account-email-form','account-password-form','club-form','join-club-form','discussion-form','activity-form','club-reply-form'].includes(form.id))return;event.preventDefault();
+    const form=event.target;if(!['register-form','login-form','settings-form','account-email-form','account-password-form','invite-link-form','club-form','join-club-form','discussion-form','activity-form','club-reply-form'].includes(form.id))return;event.preventDefault();
     const suburbInput=form.querySelector('input[name="suburb"]');
     if(suburbInput) suburbInput.value=formatSuburb(suburbInput.value);
     const d=new FormData(form),b=Object.fromEntries(d);const button=form.querySelector('button[type=submit]');const feedback=form.querySelector('.form-error');
     if([...form.querySelectorAll('[required]')].some(field=>field.type==='checkbox'?!field.checked:!field.value.trim())){feedback.innerHTML='<p class="inline-error">Please complete the required fields and agree to the community rules.</p>';return;}
     button.disabled=true;feedback.textContent='';
     try{
-      if(form.id==='register-form'){const result=await api('/auth/register',{method:'POST',body:JSON.stringify({...b,interests:d.getAll('interests'),ages:[]})});localStorage.setItem(sessionKey,result.token);me={signedIn:true,email:result.profile.email,profile:result.profile};saved=[];await refreshEventInterest();accountHeader();notify('Welcome to Family Finds.');navigate('community');}
-      if(form.id==='login-form'){const result=await api('/auth/login',{method:'POST',body:JSON.stringify(b)});localStorage.setItem(sessionKey,result.token);me={signedIn:true,email:result.profile.email,profile:result.profile};const savedData=await api('/saved');saved=savedData.events;await refreshEventInterest();updateCount();accountHeader();notify('Welcome back.');navigate('community');}
+      if(form.id==='register-form'){const result=await api('/auth/register',{method:'POST',body:JSON.stringify({...b,interests:d.getAll('interests'),ages:[]})});localStorage.setItem(sessionKey,result.token);me={signedIn:true,email:result.profile.email,profile:result.profile};saved=[];await refreshEventInterest();accountHeader();notify('Welcome to Family Finds.');inviteDestination('community');}
+      if(form.id==='login-form'){const result=await api('/auth/login',{method:'POST',body:JSON.stringify(b)});localStorage.setItem(sessionKey,result.token);me={signedIn:true,email:result.profile.email,profile:result.profile};const savedData=await api('/saved');saved=savedData.events;await refreshEventInterest();updateCount();accountHeader();notify('Welcome back.');inviteDestination('community');}
+      if(form.id==='invite-link-form'){const id=invitedClubId(b.inviteUrl);await api(`/clubs/${encodeURIComponent(id)}`);sessionStorage.setItem(pendingInviteKey,id);modal.close();if(profile())navigate(`club/${encodeURIComponent(id)}`);else{notify('Log in to join this club.');navigate('login');}}
       if(form.id==='settings-form'){const result=await api('/profile',{method:'PATCH',body:JSON.stringify({...b,interests:d.getAll('interests'),ages:d.getAll('ages'),showSuburb:d.has('showSuburb'),showInterests:d.has('showInterests')})});me.profile=result.profile;accountHeader();notify('Your profile and privacy settings are saved.');}
       if(form.id==='account-email-form'||form.id==='account-password-form'){if(form.id==='account-password-form'&&b.newPassword!==b.confirmPassword)throw new Error('New passwords do not match.');const result=await api(form.id==='account-email-form'?'/account/email':'/account/password',{method:'PATCH',body:JSON.stringify(b)});localStorage.setItem(sessionKey,result.token);me.profile=result.profile;me.email=result.profile.email;accountHeader();main.innerHTML=settingsPage();notify(form.id==='account-email-form'?'Email updated.':'Password updated.');}
       if(form.id==='club-form'){if(!await clubServerReady())throw new Error('Club approvals are unavailable until the community update is deployed.');const id=form.dataset.id;const result=await api(id?`/clubs/${id}`:'/clubs',{method:id?'PATCH':'POST',body:JSON.stringify({...b,interests:d.getAll('interests'),ages:d.getAll('ages'),private:d.has('private'),rulesAccepted:d.has('rulesAccepted')})});modal.close();clubTab='discussions';notify(id?'Club updated.':'Club created. Use Invite link to share it.');navigate('club/'+result.club.id);}
