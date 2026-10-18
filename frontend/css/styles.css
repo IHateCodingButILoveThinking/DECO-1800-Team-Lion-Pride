@@ -1078,6 +1078,50 @@ body.events-route .event-filter-panel .active-filter-list { margin-top: 12px; }
 @media (max-width: 950px) { .community-route .community-discover .club-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .community-route .community-discover .club-grid, .club-form-grid { grid-template-columns: 1fr; } .community-search-bar { flex-wrap: wrap; } .community-search-bar .search-field { flex-basis: 100%; } .community-search-bar select { width: 100%; } .invite-link-row { flex-direction: column; } .club-detail-head { padding: 24px 21px; } }
 
+/* Let new visitors reach the clubs before secondary options. */
+.community-route main { padding-top: 24px; }
+.community-route .community-hero { align-items: center; padding: 0; margin-bottom: 7px; }
+.community-route .community-hero h1 { margin: 0; font-size: clamp(2rem, 3.6vw, 2.8rem); }
+.community-route .community-navigation { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid #d9ddd6; margin-bottom: 18px; }
+.community-route .community-navigation .section-tabs { border: 0; margin: 0; min-width: 0; }
+.community-route .community-navigation .section-tabs button { min-height: 46px; padding: 12px 0; }
+.community-rules-link { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 8px 3px; border: 0; background: transparent; color: #376d55; font-size: .81rem; white-space: nowrap; }
+.community-rules-link:hover { text-decoration: underline; }
+.community-route .community-search-bar { flex-wrap: nowrap; margin: 0 0 12px; }
+.community-route .community-search-bar .search-field { min-width: 0; flex: 1 1 auto; }
+.community-filter-toggle { flex: 0 0 auto; padding: 10px 16px; }
+.community-filter-toggle[aria-expanded="true"] { border-color: #8bb39a; background: #ebf2ea; }
+.filter-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 50%; background: #d8e8d9; color: #276047; font-size: .72rem; }
+.community-filter-panel { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 10px 16px; align-items: center; padding: 16px; margin: 0 0 12px; border: 1px solid #dfe6db; border-radius: 15px; background: #f8faf6; }
+.community-filter-panel[hidden] { display: none; }
+.community-filter-panel label, .community-filter-label { color: #41594a; font-size: .8rem; font-weight: 650; }
+.community-filter-panel select { width: min(280px,100%); min-height: 43px; }
+.community-filter-panel .community-interest-filter { min-width: 0; padding: 3px 0; }
+.community-clear-filters { grid-column: 2; justify-self: start; color: #2e6c4e; font-size: .8rem; font-weight: 650; }
+.community-results-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 15px 0 13px; }
+.community-results-head strong { font-size: .85rem; color: #48574c; }
+.community-results-head > div { display: flex; gap: 8px; flex-wrap: wrap; }
+.community-simple-empty { padding: 42px 20px; border: 1px solid #e6e9e2; border-radius: 15px; background: #fff; color: #666e65; text-align: center; }
+.club-card.compact-club-card { position: relative; display: block; padding: 17px; border: 1px solid #e0e5dd; border-radius: 16px; content-visibility: visible; contain-intrinsic-size: auto; }
+.compact-club-link { display: flex; align-items: flex-start; gap: 13px; min-width: 0; }
+.compact-club-link::after { content: ''; position: absolute; inset: 0; border-radius: 16px; }
+.compact-club-icon { display: grid; flex: 0 0 47px; place-items: center; width: 47px; height: 47px; border-radius: 13px; background: #e9f1e8; color: #53856a; }
+.compact-club-icon.blue { background: #e5eff8; color: #5d83aa; }
+.compact-club-icon.purple { background: #f0eafa; color: #8b71b2; }
+.compact-club-icon.orange { background: #fbf0e1; color: #ad844c; }
+.compact-club-content { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 3px; }
+.compact-club-content strong { font-size: 1rem; line-height: 1.3; }
+.compact-club-location { color: #486c55; font-size: .77rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compact-club-description { color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compact-club-arrow { flex: 0 0 auto; color: #7d9684; margin-top: 13px; }
+.compact-club-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 14px 0 0 60px; color: #82877f; font-size: .75rem; }
+.compact-club-state { color: #2f7450; font-weight: 650; }
+.compact-club-card:hover { border-color: #a6bea9; box-shadow: 0 6px 18px #163d2710; }
+.compact-club-link:focus-visible { outline: 3px solid #327c59; outline-offset: 4px; border-radius: 6px; }
+@media (max-width: 700px) { .community-route .community-discover .club-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .community-route main { padding-top: 19px; } .community-route .community-hero { flex-direction: row; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 4px; } .community-route .community-hero h1 { font-size: 2rem; } .community-route .community-hero .button { min-height: 40px; padding: 9px 13px; white-space: nowrap; } .community-route .community-navigation { margin-bottom: 15px; } .community-route .community-navigation .section-tabs { gap: 15px; } .community-filter-panel { grid-template-columns: 1fr; } .community-clear-filters { grid-column: 1; } }
+@media (max-width: 420px) { .community-route .community-hero { flex-direction: column; align-items: flex-start; } .community-route .community-hero h1 { font-size: 1.65rem; } .community-route .community-hero .button { font-size: .78rem; } .community-route .community-navigation .section-tabs { gap: 11px; } .community-route .community-navigation .section-tabs button, .community-rules-link { font-size: .76rem; } .community-route .community-search-bar { gap: 7px; } .community-filter-toggle { padding: 9px 10px; font-size: .8rem; } .community-results-head > div .button { padding: 8px 11px; } }
+
 @media (max-width: 1000px) {
   body.events-route .event-filter-panel .event-more-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .home-route .event-grid { grid-template-columns: 1fr; }
