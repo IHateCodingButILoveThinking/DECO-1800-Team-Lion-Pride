@@ -1,4 +1,8 @@
-/* Family Finds API: Cloudflare Worker + D1. */
+// Implementation assistance: OpenAI Codex (https://openai.com/codex/); frontend/references.html#development.
+/* Family Finds API: Cloudflare Worker + D1.
+   Platform references: https://developers.cloudflare.com/workers/ and
+   https://developers.cloudflare.com/d1/ (request handlers and prepared SQL).
+   Application-specific account, community and moderation logic is maintained here. */
 import {verifyGoogleCredential} from './google-auth.js';
 const SESSION_TTL = 60 * 60 * 24 * 30;
 // Cloudflare Workers supports PBKDF2 iteration counts up to 100,000.
@@ -17,6 +21,12 @@ const list = (value, name) => {
   if (!Array.isArray(value) || value.length > 12 || value.some(item => typeof item !== 'string' || !item.trim() || item.length > 45)) fail(400, `Choose valid ${name}.`);
   return JSON.stringify([...new Set(value.map(item => item.trim()))]);
 };
+const PROFILE_AGE_GROUPS = new Set(['0–3 years', '4–7 years', '8–12 years', 'Teens', 'All ages']);
+function ageGroups(value) {
+  const encoded = list(value, 'age groups');
+  if (JSON.parse(encoded).some(group => !PROFILE_AGE_GROUPS.has(group))) fail(400, 'Choose one of the listed age groups.');
+  return encoded;
+}
 
 function safeLink(value, facebook = false) {
   const link = text(value, 'Link', 1500, false);
@@ -38,6 +48,7 @@ function parseProfile(row, own = false) {
     createdAt: row.created_at
   };
 }
+function ownProfile(row, env) { return row ? {...parseProfile(row, true), isModerator: isModerator(row, env)} : null; }
 
 const all = async (db, sql, ...args) => (await db.prepare(sql).bind(...args).all()).results;
 const first = (db, sql, ...args) => db.prepare(sql).bind(...args).first();
@@ -167,6 +178,8 @@ async function eventChat(request, env) {
   }
   if (env.AI && withinFreeAppLimit) {
     try {
+      // Cloudflare Workers AI binding and Meta Llama model reference:
+      // https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/
       const result = await env.AI.run(env.AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
         messages: [
           {
@@ -218,6 +231,9 @@ function sameHash(left, right) {
 }
 
 function configuredOrigins(env) { return String(env.ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean); }
+function isModerator(user, env) {
+  return !!user && String(env.MODERATOR_PROFILE_IDS || '').split(',').map(value => value.trim()).filter(Boolean).includes(user.id);
+}
 function isAllowedOrigin(value, env) {
   if (!value) return false;
   let url;
@@ -259,13 +275,13 @@ async function registerAccount(request, env) {
   const salt = randomToken(24);
   const id = crypto.randomUUID();
   try {
-    await run(env.DB, 'INSERT INTO profiles (id,auth_id,email,password_hash,password_salt,name,suburb,bio,interests,ages,onboarding_complete,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', id, `email:${email}`, email, await passwordHash(password, salt), salt, text(body.name, 'Name', 60), text(body.suburb, 'Suburb', 60), text(body.bio, 'Bio', 500, false), list(body.interests || [], 'interests'), list(body.ages || [], 'age groups'), 1, Date.now());
+    await run(env.DB, 'INSERT INTO profiles (id,auth_id,email,password_hash,password_salt,name,suburb,bio,interests,ages,onboarding_complete,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', id, `email:${email}`, email, await passwordHash(password, salt), salt, text(body.name, 'Name', 60), text(body.suburb, 'Suburb', 60), text(body.bio, 'Bio', 500, false), list(body.interests || [], 'interests'), ageGroups(body.ages || []), 1, Date.now());
   } catch (error) {
     if (String(error?.message || '').includes('UNIQUE')) fail(409, 'An account already uses this email. Try logging in.');
     throw error;
   }
   const user = await first(env.DB, 'SELECT * FROM profiles WHERE id=?', id);
-  return json({token: await createSession(env.DB, id), expiresIn: SESSION_TTL, profile: parseProfile(user, true)}, 201);
+  return json({token: await createSession(env.DB, id), expiresIn: SESSION_TTL, profile: ownProfile(user, env)}, 201);
 }
 
 async function loginAccount(request, env) {
@@ -276,7 +292,7 @@ async function loginAccount(request, env) {
   const salt = user?.password_salt || randomToken(24);
   const matches = sameHash(await passwordHash(password, salt), user?.password_hash || 'invalid-password-hash');
   if (!user || !user.password_hash || !matches) fail(401, 'Email or password is incorrect.');
-  return json({token: await createSession(env.DB, user.id), expiresIn: SESSION_TTL, profile: parseProfile(user, true)});
+  return json({token: await createSession(env.DB, user.id), expiresIn: SESSION_TTL, profile: ownProfile(user, env)});
 }
 
 async function logout(request, env) {
@@ -326,29 +342,44 @@ async function googleAccount(request, env) {
       user = await first(env.DB, 'SELECT * FROM profiles WHERE auth_id=?', authId);
     }
   }
-  return json({token: await createSession(env.DB, user.id), expiresIn: SESSION_TTL, profile: parseProfile(user, true), created}, created ? 201 : 200);
+  return json({token: await createSession(env.DB, user.id), expiresIn: SESSION_TTL, profile: ownProfile(user, env), created}, created ? 201 : 200);
 }
 
 async function member(db, clubId, userId) { return userId ? first(db, 'SELECT user_id FROM memberships WHERE club_id=? AND user_id=?', clubId, userId) : null; }
+async function blockedBetween(db, viewerId, otherId) {
+  return !!(viewerId && otherId && viewerId !== otherId && await first(db,
+    'SELECT 1 FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)', viewerId, otherId, otherId, viewerId));
+}
+// The SQL column names below are fixed application strings, never request values.
+const visibleAuthor = column => `NOT EXISTS (SELECT 1 FROM user_blocks ub WHERE (ub.blocker_id=? AND ub.blocked_id=${column}) OR (ub.blocker_id=${column} AND ub.blocked_id=?))`;
 async function clubById(db, id, userId) {
   const club = await first(db, 'SELECT c.*,p.name AS owner_name,(SELECT COUNT(*) FROM memberships m WHERE m.club_id=c.id) AS member_count FROM clubs c JOIN profiles p ON p.id=c.owner_id WHERE c.id=?', id);
   if (!club) fail(404, 'This club could not be found.');
   if (userId && await first(db, 'SELECT 1 FROM club_blocks WHERE club_id=? AND user_id=?', id, userId)) fail(403, 'You cannot access this club.');
   const joined = !!await member(db, id, userId);
+  const pending = userId ? await first(db, 'SELECT requested_at FROM club_join_requests WHERE club_id=? AND user_id=?', id, userId) : null;
   return {...club, interests: parseJsonArray(club.interests), ages: parseJsonArray(club.ages), is_private: !!club.is_private, is_starter: !!club.is_starter,
     facebook_url: club.is_private && !joined ? '' : club.facebook_url,
-    joined, requested: !!(userId && await first(db, 'SELECT 1 FROM club_join_requests WHERE club_id=? AND user_id=?', id, userId)),
+    joined, requested: !!pending, requested_at: pending?.requested_at ?? null,
     isOwner: club.owner_id === userId,
     requestCount: club.owner_id === userId ? (await first(db, 'SELECT COUNT(*) AS count FROM club_join_requests WHERE club_id=?', id)).count : 0};
 }
 async function requirePost(db, id, user) {
   const post = await first(db, 'SELECT * FROM posts WHERE id=?', id);
   if (!post) fail(404, 'This discussion could not be found.');
+  if (await blockedBetween(db, user?.id, post.author_id)) fail(404, 'This discussion is unavailable.');
   if (post.club_id && !await member(db, post.club_id, user?.id)) fail(403, 'Join this club to read and reply to its discussions.');
   return post;
 }
 async function postRows(db, clubId, userId) {
-  return all(db, `SELECT p.*,u.name AS author,u.show_suburb,u.suburb,c.name AS club_name,(SELECT COUNT(*) FROM replies r WHERE r.post_id=p.id) AS reply_count,(SELECT COUNT(*) FROM reactions r WHERE r.post_id=p.id) AS helpful_count,EXISTS(SELECT 1 FROM reactions r WHERE r.post_id=p.id AND r.user_id=?) AS liked FROM posts p JOIN profiles u ON u.id=p.author_id LEFT JOIN clubs c ON c.id=p.club_id WHERE ${clubId ? 'p.club_id=?' : 'p.club_id IS NULL'} ORDER BY p.created_at DESC LIMIT 100`, ...(clubId ? [userId || '', clubId] : [userId || '']));
+  const viewer = userId || '';
+  return all(db, `SELECT p.*,u.name AS author,u.show_suburb,u.suburb,c.name AS club_name,
+    (SELECT COUNT(*) FROM replies r WHERE r.post_id=p.id AND ${visibleAuthor('r.author_id')}) AS reply_count,
+    (SELECT COUNT(*) FROM reactions r WHERE r.post_id=p.id AND ${visibleAuthor('r.user_id')}) AS helpful_count,
+    EXISTS(SELECT 1 FROM reactions r WHERE r.post_id=p.id AND r.user_id=?) AS liked
+    FROM posts p JOIN profiles u ON u.id=p.author_id LEFT JOIN clubs c ON c.id=p.club_id
+    WHERE ${clubId ? 'p.club_id=?' : 'p.club_id IS NULL'} AND ${visibleAuthor('p.author_id')}
+    ORDER BY p.created_at DESC LIMIT 100`, viewer, viewer, viewer, viewer, viewer, ...(clubId ? [clubId] : []), viewer, viewer);
 }
 function publicPosts(rows) { return rows.map(row => ({...row, suburb: row.show_suburb ? row.suburb : '', show_suburb: undefined})); }
 
@@ -361,7 +392,8 @@ async function handleRequest(request, env) {
   const method = request.method;
   if (path === '/api/health' && method === 'GET') {
     const approvalTable = await first(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='club_join_requests'");
-    return json({ok: true, service: 'family-finds-api', features: {clubApproval: !!approvalTable}});
+    const safetyTable = await first(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='user_blocks'");
+    return json({ok: true, service: 'family-finds-api', features: {clubApproval: !!approvalTable, profileSafety: !!safetyTable, joinQuestions: !!safetyTable}});
   }
   if (path === '/api/auth/google' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return googleAccount(request, env); }
   if (path === '/api/auth/register' && method === 'POST') { if (!trustedMutation(request, env)) fail(403, 'Please submit this request from Family Finds.'); return registerAccount(request, env); }
@@ -377,11 +409,11 @@ async function handleRequest(request, env) {
     return user;
   };
 
-  if (path === '/api/me' && method === 'GET') return json({signedIn: !!auth, email: auth?.email || '', profile: parseProfile(user, true)});
+  if (path === '/api/me' && method === 'GET') return json({signedIn: !!auth, email: auth?.email || '', profile: ownProfile(user, env)});
   if (path === '/api/profile' && method === 'PATCH') {
     requireUser(); const body = await bodyOf(request);
-    await run(db, 'UPDATE profiles SET name=?,suburb=?,bio=?,interests=?,ages=?,show_suburb=?,show_interests=? WHERE id=?', text(body.name ?? user.name, 'Name', 60), text(body.suburb ?? user.suburb, 'Suburb', 60), text(body.bio ?? user.bio, 'Bio', 500, false), list(body.interests ?? parseJsonArray(user.interests), 'interests'), list(body.ages ?? parseJsonArray(user.ages), 'age groups'), body.showSuburb === undefined ? user.show_suburb : Number(body.showSuburb === true), body.showInterests === undefined ? user.show_interests : Number(body.showInterests === true), user.id);
-    return json({profile: parseProfile(await first(db, 'SELECT * FROM profiles WHERE id=?', user.id), true)});
+    await run(db, 'UPDATE profiles SET name=?,suburb=?,bio=?,interests=?,ages=?,show_suburb=?,show_interests=? WHERE id=?', text(body.name ?? user.name, 'Name', 60), text(body.suburb ?? user.suburb, 'Suburb', 60), text(body.bio ?? user.bio, 'Bio', 500, false), list(body.interests ?? parseJsonArray(user.interests), 'interests'), ageGroups(body.ages ?? parseJsonArray(user.ages)), body.showSuburb === undefined ? user.show_suburb : Number(body.showSuburb === true), body.showInterests === undefined ? user.show_interests : Number(body.showInterests === true), user.id);
+    return json({profile: ownProfile(await first(db, 'SELECT * FROM profiles WHERE id=?', user.id), env)});
   }
   if (path === '/api/account/email' && method === 'PATCH') {
     requireUser(); const body = await bodyOf(request);
@@ -396,7 +428,7 @@ async function handleRequest(request, env) {
       }
     }
     await run(db, 'DELETE FROM sessions WHERE user_id=?', user.id);
-    return json({token: await createSession(db, user.id), profile: parseProfile(await first(db, 'SELECT * FROM profiles WHERE id=?', user.id), true)});
+    return json({token: await createSession(db, user.id), profile: ownProfile(await first(db, 'SELECT * FROM profiles WHERE id=?', user.id), env)});
   }
   if (path === '/api/account/password' && method === 'PATCH') {
     requireUser(); const body = await bodyOf(request);
@@ -406,21 +438,101 @@ async function handleRequest(request, env) {
     const salt = randomToken(24);
     await run(db, 'UPDATE profiles SET password_hash=?,password_salt=? WHERE id=?', await passwordHash(password, salt), salt, user.id);
     await run(db, 'DELETE FROM sessions WHERE user_id=?', user.id);
-    return json({token: await createSession(db, user.id), profile: parseProfile(await first(db, 'SELECT * FROM profiles WHERE id=?', user.id), true)});
+    return json({token: await createSession(db, user.id), profile: ownProfile(await first(db, 'SELECT * FROM profiles WHERE id=?', user.id), env)});
+  }
+  if (path === '/api/blocks' && method === 'GET') {
+    requireUser();
+    return json({members: await all(db, 'SELECT p.id,p.name,b.created_at AS blocked_at FROM user_blocks b JOIN profiles p ON p.id=b.blocked_id WHERE b.blocker_id=? ORDER BY b.created_at DESC', user.id)});
+  }
+  if (path === '/api/blocks' && method === 'POST') {
+    requireUser(); const body = await bodyOf(request); const targetId = text(body.profileId, 'Member', 80);
+    if (targetId === user.id) fail(400, 'You cannot block your own account.');
+    if (!await first(db, 'SELECT id FROM profiles WHERE id=? AND onboarding_complete=1', targetId)) fail(404, 'Member not found.');
+    await run(db, 'INSERT OR IGNORE INTO user_blocks (blocker_id,blocked_id,created_at) VALUES (?,?,?)', user.id, targetId, Date.now());
+    return json({blocked: true});
+  }
+  const personalBlockMatch = path.match(/^\/api\/blocks\/([^/]+)$/);
+  if (personalBlockMatch && method === 'DELETE') {
+    requireUser();
+    await run(db, 'DELETE FROM user_blocks WHERE blocker_id=? AND blocked_id=?', user.id, decodeURIComponent(personalBlockMatch[1]));
+    return json({blocked: false});
+  }
+  if (path === '/api/reports' && method === 'GET') {
+    requireUser();
+    return json({reports: await all(db, `SELECT r.id,r.reported_id,p.name AS reported_name,r.reason,r.details,r.club_id,c.name AS club_name,r.status,r.created_at,r.reviewed_at
+      FROM user_reports r JOIN profiles p ON p.id=r.reported_id LEFT JOIN clubs c ON c.id=r.club_id
+      WHERE r.reporter_id=? ORDER BY r.created_at DESC LIMIT 100`, user.id)});
+  }
+  if (path === '/api/reports' && method === 'POST') {
+    requireUser(); const body = await bodyOf(request); const targetId = text(body.profileId, 'Member', 80);
+    if (targetId === user.id) fail(400, 'You cannot report your own account.');
+    if (!await first(db, 'SELECT id FROM profiles WHERE id=? AND onboarding_complete=1', targetId)) fail(404, 'Member not found.');
+    const reasons = ['harassment', 'spam', 'unsafe', 'inappropriate', 'privacy', 'other'];
+    if (!reasons.includes(body.reason)) fail(400, 'Choose a reason for your report.');
+    const details = text(body.details, 'Report details', 1500, body.reason === 'other');
+    const clubId = body.clubId ? text(body.clubId, 'Club', 80) : null;
+    if (clubId) {
+      const reportClub = await clubById(db, clubId, user.id);
+      if (!reportClub.joined) fail(403, 'Join this club before submitting a club report.');
+      if (reportClub.owner_id === targetId) fail(400, 'Report this account without a club selected so it is not sent to the person being reported.');
+      if (!await member(db, clubId, targetId) && !await first(db, 'SELECT id FROM posts WHERE club_id=? AND author_id=?', clubId, targetId)) fail(400, 'Choose a member of this club.');
+    }
+    const existing = await first(db, 'SELECT id,status,created_at FROM user_reports WHERE reporter_id=? AND reported_id=? AND reason=? AND club_id IS ? AND status=?', user.id, targetId, body.reason, clubId, 'pending');
+    if (existing) return json({report: existing, submitted: true});
+    const id = crypto.randomUUID(); const now = Date.now();
+    await run(db, 'INSERT INTO user_reports (id,reporter_id,reported_id,reason,details,club_id,status,created_at) VALUES (?,?,?,?,?,?,?,?)', id, user.id, targetId, body.reason, details, clubId, 'pending', now);
+    return json({report: {id, status: 'pending', created_at: now}, submitted: true}, 201);
+  }
+  const moderatorReportsMatch = path.match(/^\/api\/reports\/moderation(?:\/([^/]+))?$/);
+  if (moderatorReportsMatch) {
+    requireUser();
+    if (!isModerator(user, env)) fail(403, 'Only an assigned moderator can review these reports.');
+    const reportId = moderatorReportsMatch[1];
+    if (!reportId && method === 'GET') return json({reports: await all(db, `SELECT r.id,r.reported_id,p.name AS reported_name,r.reporter_id,reporter.name AS reporter_name,r.reason,r.details,r.club_id,c.name AS club_name,r.status,r.created_at,r.reviewed_at
+      FROM user_reports r JOIN profiles p ON p.id=r.reported_id JOIN profiles reporter ON reporter.id=r.reporter_id LEFT JOIN clubs c ON c.id=r.club_id
+      WHERE r.reported_id<>? ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC LIMIT 100`, user.id)});
+    if (reportId && method === 'PATCH') {
+      const body = await bodyOf(request);
+      if (!['resolved', 'dismissed'].includes(body.status)) fail(400, 'Choose a report review outcome.');
+      const report = await first(db, 'SELECT reported_id FROM user_reports WHERE id=?', reportId);
+      if (!report) fail(404, 'Report not found.');
+      if (report.reported_id === user.id) fail(403, 'Another moderator must review a report about your account.');
+      await run(db, 'UPDATE user_reports SET status=?,reviewed_at=? WHERE id=?', body.status, Date.now(), reportId);
+      return json({reviewed: true, status: body.status});
+    }
+  }
+  const clubReportsMatch = path.match(/^\/api\/clubs\/([^/]+)\/reports(?:\/([^/]+))?$/);
+  if (clubReportsMatch) {
+    requireUser(); const [, clubId, reportId] = clubReportsMatch;
+    const reportClub = await clubById(db, clubId, user.id);
+    if (!reportClub.isOwner) fail(403, 'Only the club owner can review club reports.');
+    if (!reportId && method === 'GET') return json({reports: await all(db, `SELECT r.id,r.reported_id,p.name AS reported_name,r.reporter_id,reporter.name AS reporter_name,r.reason,r.details,r.club_id,c.name AS club_name,r.status,r.created_at,r.reviewed_at
+      FROM user_reports r JOIN profiles p ON p.id=r.reported_id JOIN profiles reporter ON reporter.id=r.reporter_id JOIN clubs c ON c.id=r.club_id
+      WHERE r.club_id=? ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC LIMIT 100`, clubId)});
+    if (reportId && method === 'PATCH') {
+      const body = await bodyOf(request);
+      if (!['resolved', 'dismissed'].includes(body.status)) fail(400, 'Choose a report review outcome.');
+      const report = await first(db, 'SELECT id FROM user_reports WHERE id=? AND club_id=?', reportId, clubId);
+      if (!report) fail(404, 'Report not found.');
+      await run(db, 'UPDATE user_reports SET status=?,reviewed_at=? WHERE id=? AND club_id=?', body.status, Date.now(), reportId, clubId);
+      return json({reviewed: true, status: body.status});
+    }
   }
   if (path.startsWith('/api/profiles/') && method === 'GET') {
     requireUser(); const id = decodeURIComponent(path.slice('/api/profiles/'.length)); const profile = await first(db, 'SELECT * FROM profiles WHERE id=? AND onboarding_complete=1', id); if (!profile) fail(404, 'Member not found.');
-    return json({profile: parseProfile(profile, id === user.id), clubs: await all(db, `SELECT c.id,c.name,c.suburb,c.color FROM clubs c JOIN memberships m ON m.club_id=c.id
+    if (await blockedBetween(db, user.id, id)) fail(404, 'This member is unavailable.');
+    return json({profile: id === user.id ? ownProfile(profile, env) : parseProfile(profile), clubs: await all(db, `SELECT c.id,c.name,c.suburb,c.color FROM clubs c JOIN memberships m ON m.club_id=c.id
       WHERE m.user_id=? AND (c.is_private=0 OR EXISTS(SELECT 1 FROM memberships viewer WHERE viewer.club_id=c.id AND viewer.user_id=?))
       AND NOT EXISTS(SELECT 1 FROM club_blocks b WHERE b.club_id=c.id AND b.user_id=?) ORDER BY c.name`, id, user.id, user.id)});
   }
   if (path === '/api/clubs' && method === 'GET') {
     const clubs = await all(db, `SELECT c.*,p.name AS owner_name,(SELECT COUNT(*) FROM memberships m WHERE m.club_id=c.id) AS member_count,
       EXISTS(SELECT 1 FROM memberships m WHERE m.club_id=c.id AND m.user_id=?) AS joined,
-      EXISTS(SELECT 1 FROM club_join_requests r WHERE r.club_id=c.id AND r.user_id=?) AS requested
+      EXISTS(SELECT 1 FROM club_join_requests r WHERE r.club_id=c.id AND r.user_id=?) AS requested,
+      (SELECT r.requested_at FROM club_join_requests r WHERE r.club_id=c.id AND r.user_id=?) AS requested_at
       FROM clubs c JOIN profiles p ON p.id=c.owner_id
       WHERE NOT EXISTS(SELECT 1 FROM club_blocks b WHERE b.club_id=c.id AND b.user_id=?)
-      ORDER BY c.is_starter DESC,c.created_at DESC LIMIT 200`, user?.id || '', user?.id || '', user?.id || '');
+      ORDER BY c.is_starter DESC,c.created_at DESC LIMIT 200`, user?.id || '', user?.id || '', user?.id || '', user?.id || '');
     return json({clubs: clubs.map(club => ({...club, facebook_url: club.is_private && !club.joined ? '' : club.facebook_url, interests: parseJsonArray(club.interests), ages: parseJsonArray(club.ages), joined: !!club.joined, requested: !!club.requested, is_private: !!club.is_private, is_starter: !!club.is_starter, isOwner: club.owner_id === user?.id}))});
   }
   if (path === '/api/clubs' && method === 'POST') {
@@ -440,9 +552,9 @@ async function handleRequest(request, env) {
     const club = await clubById(db, id, user.id);
     if (!club.isOwner) fail(403, 'Only the club owner can manage members.');
     if (action === 'requests' && !targetId && method === 'GET') {
-      const requests = await all(db, `SELECT p.id,p.name,CASE WHEN p.show_suburb=1 THEN p.suburb ELSE '' END AS suburb,r.requested_at
+      const requests = await all(db, `SELECT p.id,p.name,CASE WHEN p.show_suburb=1 THEN p.suburb ELSE '' END AS suburb,r.requested_at,r.join_answers
         FROM club_join_requests r JOIN profiles p ON p.id=r.user_id WHERE r.club_id=? ORDER BY r.requested_at`, id);
-      return json({requests});
+      return json({requests: requests.map(({join_answers, ...pending}) => ({...pending, answers: parseJsonArray(join_answers)}))});
     }
     if (action === 'requests' && targetId && method === 'POST') {
       const pending = await first(db, 'SELECT * FROM club_join_requests WHERE club_id=? AND user_id=?', id, targetId);
@@ -484,11 +596,14 @@ async function handleRequest(request, env) {
     if (action === 'membership' && method === 'POST') {
       requireUser();
       if (club.joined) return json({club});
+      if (club.is_private && club.requested) return json({club, requested: true});
       const body = await bodyOf(request);
       if (body.rulesAccepted !== true) fail(400, 'Agree to the community rules before joining a club.');
       const now = Date.now();
       if (club.is_private) {
-        await run(db, 'INSERT OR IGNORE INTO club_join_requests (club_id,user_id,requested_at,rules_accepted_at) VALUES (?,?,?,?)', id, user.id, now, now);
+        if (!Array.isArray(body.answers) || body.answers.length !== 2) fail(400, 'Answer both questions before requesting to join.');
+        const answers = body.answers.map((answer, index) => text(answer, `Answer ${index + 1}`, 500));
+        await run(db, 'INSERT OR IGNORE INTO club_join_requests (club_id,user_id,requested_at,rules_accepted_at,join_answers) VALUES (?,?,?,?,?)', id, user.id, now, now, JSON.stringify(answers));
         return json({club: await clubById(db, id, user.id), requested: true});
       }
       await run(db, 'INSERT OR IGNORE INTO memberships (club_id,user_id,created_at,rules_accepted_at) VALUES (?,?,?,?)', id, user.id, now, now);
@@ -502,7 +617,7 @@ async function handleRequest(request, env) {
       ]);
       return json({club: await clubById(db, id, user.id)});
     }
-    if (action === 'members' && method === 'GET') { requireUser(); if (!club.joined) fail(403, 'Join this club to see its members.'); const rows = await all(db, 'SELECT p.* FROM profiles p JOIN memberships m ON m.user_id=p.id WHERE m.club_id=? ORDER BY m.created_at', id); return json({members: rows.map(profile => ({...parseProfile(profile), isOwner: profile.id === club.owner_id}))}); }
+    if (action === 'members' && method === 'GET') { requireUser(); if (!club.joined) fail(403, 'Join this club to see its members.'); const rows = await all(db, `SELECT p.* FROM profiles p JOIN memberships m ON m.user_id=p.id WHERE m.club_id=? AND ${visibleAuthor('p.id')} ORDER BY m.created_at`, id, user.id, user.id); return json({members: rows.map(profile => ({...parseProfile(profile), isOwner: profile.id === club.owner_id}))}); }
   }
   if (path === '/api/posts' && method === 'GET') return json({posts: publicPosts(await postRows(db, null, user?.id))});
   if (path === '/api/posts' && method === 'POST') {
@@ -514,7 +629,7 @@ async function handleRequest(request, env) {
   const postMatch = path.match(/^\/api\/posts\/([^/]+)(?:\/(replies|helpful))?$/);
   if (postMatch) {
     const id = postMatch[1]; const action = postMatch[2]; const post = await requirePost(db, id, user);
-    if (!action && method === 'GET') { const author = await first(db, 'SELECT * FROM profiles WHERE id=?', post.author_id); const replies = await all(db, 'SELECT r.*,p.name AS author FROM replies r JOIN profiles p ON p.id=r.author_id WHERE r.post_id=? ORDER BY r.created_at ASC', id); return json({post: {...post, author: author.name}, replies}); }
+    if (!action && method === 'GET') { const author = await first(db, 'SELECT * FROM profiles WHERE id=?', post.author_id); const replies = await all(db, `SELECT r.*,p.name AS author FROM replies r JOIN profiles p ON p.id=r.author_id WHERE r.post_id=? AND ${visibleAuthor('r.author_id')} ORDER BY r.created_at ASC`, id, user?.id || '', user?.id || ''); return json({post: {...post, author: author.name}, replies}); }
     if (!action && method === 'DELETE') { requireUser(); const owner = post.club_id ? await first(db, 'SELECT owner_id FROM clubs WHERE id=?', post.club_id) : null; if (post.author_id !== user.id && owner?.owner_id !== user.id) fail(403, 'Only the author or club owner can remove this discussion.'); await run(db, 'DELETE FROM posts WHERE id=?', id); return json({deleted: true}); }
     if (action === 'replies' && method === 'POST') { requireUser(); const body = await bodyOf(request); await run(db, 'INSERT INTO replies (id,post_id,author_id,body,created_at) VALUES (?,?,?,?,?)', crypto.randomUUID(), id, user.id, text(body.body, 'Reply', 2000), Date.now()); return json({created: true}, 201); }
     if (action === 'helpful' && method === 'POST') { requireUser(); await run(db, 'INSERT OR IGNORE INTO reactions (post_id,user_id) VALUES (?,?)', id, user.id); return json({helpful: true}); }
@@ -529,7 +644,7 @@ async function handleRequest(request, env) {
     const shared = await all(db, `SELECT ei.event_id,p.id AS user_id,p.name,c.id AS club_id,c.name AS club_name
       FROM event_interest ei JOIN profiles p ON p.id=ei.user_id JOIN memberships theirs ON theirs.user_id=ei.user_id
       JOIN memberships mine ON mine.club_id=theirs.club_id AND mine.user_id=? JOIN clubs c ON c.id=mine.club_id
-      WHERE ei.user_id<>? ORDER BY ei.created_at DESC LIMIT 2000`, user.id, user.id);
+      WHERE ei.user_id<>? AND ${visibleAuthor('ei.user_id')} ORDER BY ei.created_at DESC LIMIT 2000`, user.id, user.id, user.id, user.id);
     const events = {};
     for (const row of own) events[row.event_id] = {interested: true, people: [], count: 0, clubs: []};
     for (const row of shared) {

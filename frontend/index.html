@@ -5,13 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Find affordable Brisbane activities, join local family clubs, and make everyday life a little more connected.">
   <title>Family Finds · Brisbane families</title>
-  <link rel="stylesheet" href="css/styles.css?v=20261018-community-simplify-1">
+  <link rel="stylesheet" href="css/styles.css?v=20261020-account-team-1">
+  <link rel="stylesheet" href="css/community-safety.css?v=20261020-account-team-1">
+  <link rel="stylesheet" href="css/event-preferences.css?v=20261020-account-team-1">
+  <link rel="stylesheet" href="css/references.css?v=20261019-family-settings-1">
   <link rel="icon" type="image/png" href="assets/logo.png">
   <script src="js/config.js?v=20261018-club-invites-1" defer></script>
-  <script src="js/events-api.js?v=20261016-club-safety-1" defer></script>
-  <script src="js/icons.js?v=20261016-club-safety-1" defer></script>
-  <script src="js/community.js?v=20261018-community-simplify-1" defer></script>
-  <script src="js/script.js?v=20261016-club-safety-1" defer></script>
+  <script src="js/events-api.js?v=20261019-family-settings-1" defer></script>
+  <script src="js/icons.js?v=20261020-account-team-1" defer></script>
+  <script src="js/community.js?v=20261020-account-team-1" defer></script>
+  <script src="js/event-preferences.js?v=20261020-account-team-1" defer></script>
+  <script src="js/script.js?v=20261020-account-team-1" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -23,12 +27,14 @@
         <a href="#events" data-nav="events">Events</a>
         <a href="#saved" data-nav="saved">Saved <span id="saved-count">0</span></a>
         <a href="#community" data-nav="community">Community</a>
+        <a href="#about" data-nav="about">About</a>
       </nav>
       <div class="header-account" id="header-account"><a href="#login">Log in</a><a class="button primary header-register" href="#register">Join Family Finds</a></div>
     </div>
   </header>
   <main id="main" tabindex="-1"></main>
-  <footer class="site-footer"><a class="footer-brand" href="index.html">Family Finds</a><span>More to do. More to share. Closer to home.</span><a href="https://data.brisbane.qld.gov.au/explore/dataset/brisbane-city-council-events/" target="_blank" rel="noopener noreferrer">Event data: Brisbane City Council ↗</a></footer>
+  <!-- Event text and image URLs come from the Council dataset. See references.html#council-events. -->
+  <footer class="site-footer"><a class="footer-brand" href="index.html">Family Finds</a><span>More to do. More to share. Closer to home.</span><a href="#about">About us</a><a href="references.html#council-events">Event information &amp; images: Brisbane City Council</a><a href="references.html">Sources &amp; credits</a></footer>
   <dialog id="modal" aria-labelledby="modal-title"><button class="close-button" type="button" aria-label="Close dialog">×</button><div id="modal-content"></div></dialog>
   <div id="toast" class="toast" role="status"></div>
 </body>

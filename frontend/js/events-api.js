@@ -1,4 +1,8 @@
-/* Public BCC Open Data API. No key or framework required.
+// Implementation assistance: OpenAI Codex (https://openai.com/codex/); frontend/references.html#development.
+/* Source: Brisbane City Council, Brisbane City Council Events dataset.
+   https://data.brisbane.qld.gov.au/explore/dataset/brisbane-city-council-events/
+   API: https://help.opendatasoft.com/apis/ods-explore-v2/
+   Listing text and images are supplied by the dataset; original listing links remain visible.
    Dates are interpreted in Brisbane; HTML from the feed is reduced to text. */
 const CouncilEvents = (() => {
   const endpoint = 'https://data.brisbane.qld.gov.au/api/explore/v2.1/catalog/datasets/brisbane-city-council-events/records';
@@ -11,7 +15,13 @@ const CouncilEvents = (() => {
   let suburbsRequest;
   function plain(value) {
     const document = new DOMParser().parseFromString(String(value ?? ''), 'text/html');
+    // Council descriptions often put paragraphs next to each other without whitespace.
+    document.body.querySelectorAll('br, p, div, li, section, article, h1, h2, h3').forEach(node => node.insertAdjacentText('afterend', ' '));
     return document.body.textContent.replace(/\s+/g, ' ').trim();
+  }
+  function listedText(value) {
+    const text = plain(value);
+    return /^(?:-|–|—|n\/?a|none)$/i.test(text) ? '' : text;
   }
   function bookingLink(value) {
     const document = new DOMParser().parseFromString(String(value ?? ''), 'text/html');
@@ -86,19 +96,24 @@ const CouncilEvents = (() => {
     const url = /^https:\/\//i.test(rawLink) ? rawLink : '';
     const venue = plain(row.venue || row.location) || 'Venue to be confirmed';
     const coordinates = row.geolocation;
-    const bookings = plain(row.bookings);
+    const bookings = listedText(row.bookings);
+    const bookingFlag = listedText(row.bookingsrequired);
     const bookingUrl = bookingLink(row.bookings);
     const phone = bookingPhone(row.bookings);
     const noBookingText = /^(?:not required|none|no)\.?$/i.test(bookings) ||
       /\b(?:no (?:pre-?)?(?:bookings?|registrations?|reservations?) (?:are |is )?(?:required|needed|necessary)|(?:bookings?|registrations?|reservations?) (?:are |is )?not (?:required|needed|necessary)|(?:no need to|do not need to|don't need to) (?:book|register|reserve))\b/i.test(bookings);
-    const requiredBookingText = /\b(?:bookings?|registrations?|reservations?) (?:are |is )?(?:required|essential|needed)\b|\b(?:must|need to) (?:book|register|reserve)\b/i.test(bookings);
+    const withoutNoBooking = bookings
+      .replace(/\bno (?:pre-?)?(?:bookings?|registrations?|reservations?) (?:are |is )?(?:required|needed|necessary)\b/gi, '')
+      .replace(/\b(?:bookings?|registrations?|reservations?) (?:are |is )?not (?:required|needed|necessary)\b/gi, '')
+      .replace(/\b(?:no need to|do not need to|don't need to) (?:book|register|reserve)\b/gi, '');
+    const requiredBookingText = /\b(?:bookings?|registrations?|reservations?) (?:are |is )?(?:required|essential|needed)\b|\b(?:must|need to) (?:book|register|reserve)\b/i.test(withoutNoBooking);
     // Some listings distinguish participants from spectators; do not label those as registration-free.
-    const bookingRequired = noBookingText && requiredBookingText ? null : noBookingText
-      ? false
-      : requiredBookingText
-        ? true
-        : /^(?:no|not required|none)$/i.test(plain(row.bookingsrequired)) ? false
-          : /^yes$/i.test(plain(row.bookingsrequired)) ? true : null;
+    const statedRequirement = noBookingText && requiredBookingText ? null : noBookingText ? false : requiredBookingText ? true : null;
+    const flaggedRequirement = /^(?:no|not required)$/i.test(bookingFlag) ? false
+      : /^yes$/i.test(bookingFlag) ? true : null;
+    const bookingRequired = noBookingText && requiredBookingText ||
+      statedRequirement !== null && flaggedRequirement !== null && statedRequirement !== flaggedRequirement
+      ? null : statedRequirement ?? flaggedRequirement;
     return {
       id: `bcc-${rawLink || row.subject}-${row.start_datetime}`,
       image: /^https:\/\//i.test(String(row.eventimage || '')) ? String(row.eventimage) : '',
@@ -111,12 +126,12 @@ const CouncilEvents = (() => {
       time: formattedTime || start.toLocaleString('en-AU', { timeZone: zone }), timeLabel,
       cost: /^(?:free\b|\$?0(?:\.00)?(?:\s|$))/i.test(costLabel) ? 0 : null, costLabel,
       ages: plain(row.age) || (row.agerange || []).join(', ') || 'Check age suitability',
-      ageRanges: row.agerange || [], description: plain(row.description),
+      ageRanges: row.agerange || [], description: plain(row.description).replace(/([.!?])(?=[A-Z])/g, '$1 '),
       tags: activityTags(row), family: familyRelevant(row),
       bookings, bookingUrl, bookingRequired,
       bookingPhone: phone?.display || '', bookingPhoneUrl: phone?.dial || '',
       bookingPhoneCanBook: /\b(?:to book|book(?:ing|ings)? (?:by|via|through|on) phone|phone (?:to|for) book(?:ing)?|call (?:to|for) book(?:ing)?)\b/i.test(bookings),
-      requirements: plain(row.requirements),
+      requirements: listedText(row.requirements),
       weekend: day === 'Saturday' || day === 'Sunday', url, live: true
     };
   }
@@ -167,6 +182,10 @@ const CouncilEvents = (() => {
     for (const suburb of filters.suburbs || []) clauses.push(search('venueaddress,location', suburb));
     if (filters.freeOnly) clauses.push(`(${search('cost', 'free')} OR startswith(cost,"$0") OR startswith(cost,"0"))`);
     if (filters.familyOnly) clauses.push(anyTerm('age,agerange,subject', ['all ages', 'famil', 'child', 'kid', 'preschool', 'bab', 'toddler', 'teen', 'youth', 'ages 5', 'ages 6', 'ages 7', 'ages 8', 'ages 9']));
+    // These are broad candidates only. The browser checks the actual age intervals,
+    // including each saved child age group, before showing an age-filtered result.
+    if (filters.ageFilter) clauses.push(anyTerm('age,agerange', ['all ages', 'famil', 'everyone', 'bab', 'infant', 'toddler', 'preschool', 'child', 'kid', 'primary', 'school', 'teen', 'youth', 'young', 'age', 'year', ...Array.from({length: 18}, (_, age) => String(age))]));
+    if (filters.interestTerms?.length) clauses.push(anyTerm('subject,event_type,activitytype,venue,description', filters.interestTerms.slice(0, 64)));
     if (filters.petFriendly) clauses.push(anyTerm('subject,description,requirements', ['dog', 'pet', 'puppy', 'leash']));
     for (const need of filters.accessibility || []) {
       const terms = {wheelchair: ['wheelchair', 'accessible'], stroller: ['stroller', 'pram', 'accessible'], pram: ['stroller', 'pram', 'accessible'], 'sensory friendly': ['sensory', 'quiet']}[need];
@@ -217,6 +236,16 @@ const CouncilEvents = (() => {
     while (cache.size > 12) cache.delete(cache.keys().next().value);
     return data;
   }
+  async function loadById(id, signal) {
+    const match = /^bcc-(.{1,500})-(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))$/.exec(String(id));
+    if (!match) return null;
+    const [, source, start] = match;
+    const column = /^https?:\/\//i.test(source) ? 'web_link' : 'subject';
+    const params = new URLSearchParams({limit: '2', select: fields,
+      where: `${column} = ${literal(source)} AND start_datetime = date'${start}'`});
+    const data = await request(params, signal);
+    return data.results.map(normalize).find(event => event.id === id) || null;
+  }
   // Fetch only distinct place names, so the suburb picker is not limited to page one.
   function loadSuburbs() {
     if (!suburbsRequest) {
@@ -232,5 +261,5 @@ const CouncilEvents = (() => {
     }
     return suburbsRequest;
   }
-  return { loadPage, loadSuburbs, normalize, pageSize, tagSearchTerms };
+  return { loadPage, loadById, loadSuburbs, normalize, pageSize, tagSearchTerms };
 })();

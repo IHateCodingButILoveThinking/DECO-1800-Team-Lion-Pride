@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Sources for the event information, images and tools used by Family Finds.">
+  <title>Sources &amp; credits · Family Finds</title>
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <link rel="stylesheet" href="css/styles.css?v=20261020-account-team-1">
+  <link rel="stylesheet" href="css/references.css?v=20261019-family-settings-1">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.png" alt="" width="39" height="39">Family Finds</a>
+      <nav aria-label="Main navigation">
+        <a href="index.html">Home</a>
+        <a href="index.html#events">Events</a>
+        <a href="index.html#saved">Saved</a>
+        <a href="index.html#community">Community</a>
+        <a href="index.html#about">About</a>
+      </nav>
+    </div>
+  </header>
+  <main id="main" class="references-page" tabindex="-1">
+    <a class="back-link" href="index.html#about">← About Family Finds</a>
+    <header class="references-intro">
+      <h1>Sources &amp; credits</h1>
+      <p class="intro">Where our event information, images and tools come from.</p>
+    </header>
+    <section id="council-events" class="reference-entry" aria-labelledby="council-source-title">
+      <h2 id="council-source-title">Event information and photographs</h2>
+      <p>Brisbane City Council. <cite>Events</cite>. Council Open Data.</p>
+      <p>Titles, descriptions, dates, costs, age information, venues, booking details and event image links come from this dataset. Each activity links to its original Council listing. Photographs may belong to the organiser or another credited creator; follow the original listing for its image credits.</p>
+      <p>The Council describes this dataset as a daily extract from Trumba, limited to the next 2,000 events. Family Finds loads a small batch at a time, so the listings are not a complete directory of Brisbane activities.</p>
+      <ul class="reference-links">
+        <li><a href="https://data.brisbane.qld.gov.au/explore/dataset/brisbane-city-council-events/information/" target="_blank" rel="noopener noreferrer">Dataset and source information ↗</a></li>
+        <li><a href="https://data.brisbane.qld.gov.au/explore/dataset/brisbane-city-council-events/api/" target="_blank" rel="noopener noreferrer">Council API documentation ↗</a></li>
+      </ul>
+    </section>
+    <section id="google-sign-in" class="reference-entry" aria-labelledby="google-source-title">
+      <h2 id="google-source-title">Google sign-in</h2>
+      <p>Google. <cite>Sign in with Google for Web — Google Identity Services</cite>.</p>
+      <p>The login and registration pages use Google's official sign-in button and library. The backend verifies the identity token before opening a Family Finds session.</p>
+      <a href="https://developers.google.com/identity/gsi/web/guides/overview" target="_blank" rel="noopener noreferrer">Google Identity Services documentation ↗</a>
+    </section>
+    <section id="platform" class="reference-entry" aria-labelledby="platform-source-title">
+      <h2 id="platform-source-title">Accounts and community tools</h2>
+      <p>Cloudflare. <cite>Workers</cite> and <cite>D1</cite>.</p>
+      <p>The account and community features use a Cloudflare Worker and D1 database. The website files are hosted on the UQ Team Zone.</p>
+      <ul class="reference-links">
+        <li><a href="https://developers.cloudflare.com/workers/" target="_blank" rel="noopener noreferrer">Cloudflare Workers documentation ↗</a></li>
+        <li><a href="https://developers.cloudflare.com/d1/" target="_blank" rel="noopener noreferrer">Cloudflare D1 documentation ↗</a></li>
+      </ul>
+    </section>
+    <section id="event-finder" class="reference-entry" aria-labelledby="finder-source-title">
+      <h2 id="finder-source-title">Ask AI event finder</h2>
+      <p>Cloudflare Workers AI and Meta. <cite>Llama 3.3 70B Instruct FP8 Fast</cite>.</p>
+      <p>The existing event finder can use this model to turn a message into search filters. A built-in keyword matcher runs when the service is unavailable or the application's daily limit is reached. Suggestions use Council listings; age, pet and access requirements should be checked with the organiser.</p>
+      <a href="https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/" target="_blank" rel="noopener noreferrer">Model and service documentation ↗</a>
+    </section>
+    <section id="code" class="reference-entry" aria-labelledby="code-source-title">
+      <h2 id="code-source-title">External code</h2>
+      <p>Filip Skokan and contributors. <cite>jose</cite>, version 6.2.12. MIT licence.</p>
+      <p>The backend uses this library to verify Google's signed identity tokens.</p>
+      <ul class="reference-links">
+        <li><a href="https://github.com/panva/jose" target="_blank" rel="noopener noreferrer">Source code and documentation ↗</a></li>
+        <li><a href="https://github.com/panva/jose/blob/v6.2.12/LICENSE.md" target="_blank" rel="noopener noreferrer">Licence ↗</a></li>
+      </ul>
+    </section>
+    <section id="interaction-design" class="reference-entry" aria-labelledby="interaction-source-title">
+      <h2 id="interaction-source-title">Interface guidance</h2>
+      <p>W3C Web Accessibility Initiative. <cite>Disclosure Navigation Menu</cite>. Atlassian. <cite>Button</cite> and <cite>Icon</cite> usage guidance.</p>
+      <p>These references informed the account dropdown's keyboard and closing behaviour, labelled safety buttons and consistent icons. The components are implemented in this project's own HTML, CSS and JavaScript.</p>
+      <ul class="reference-links">
+        <li><a href="https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/examples/disclosure-navigation/" target="_blank" rel="noopener noreferrer">W3C disclosure guidance ↗</a></li>
+        <li><a href="https://atlassian.design/components/button/usage" target="_blank" rel="noopener noreferrer">Atlassian button guidance ↗</a></li>
+        <li><a href="https://atlassian.design/components/icon/usage" target="_blank" rel="noopener noreferrer">Atlassian icon guidance ↗</a></li>
+      </ul>
+    </section>
+    <section id="team-photo" class="reference-entry" aria-labelledby="team-photo-title">
+      <h2 id="team-photo-title">Team portraits</h2>
+      <p>Photograph supplied by Team Lion Pride from the DECO1800 tradeshow. Individual portraits are display crops of the supplied photograph.</p>
+    </section>
+    <section id="development" class="reference-entry" aria-labelledby="development-source-title">
+      <h2 id="development-source-title">Development assistance</h2>
+      <p>OpenAI. <cite>Codex</cite>.</p>
+      <p>Codex was used to assist with implementation and testing.</p>
+      <a href="https://openai.com/codex/" target="_blank" rel="noopener noreferrer">OpenAI Codex ↗</a>
+    </section>
+    <section id="artwork" class="reference-entry" aria-labelledby="artwork-source-title">
+      <h2 id="artwork-source-title">Logo and interface icons</h2>
+      <p>Team Lion Pride. <cite>Family Finds logo and interface icons</cite>. Tool-generated artwork supplied for this project.</p>
+    </section>
+  </main>
+  <footer class="site-footer"><a class="footer-brand" href="index.html">Family Finds</a><span>More to do. More to share. Closer to home.</span><a href="index.html#about">About us</a><a href="references.html" aria-current="page">Sources &amp; credits</a></footer>
+</body>
+</html>

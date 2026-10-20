@@ -5,6 +5,7 @@ import {readFileSync, readdirSync} from 'node:fs';
 import worker from '../src/worker.js';
 
 const origin = 'https://deco1800teams-lion-pride.uqcloud.net';
+const joinAnswers = ['Find local walks with other families.', 'Share ideas and help welcome new members.'];
 function database() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec('PRAGMA foreign_keys=ON');
@@ -63,7 +64,7 @@ test('starter clubs, owner approval, club blocks and account changes', async () 
     assert.equal(post.status, 201);
     assert.equal((await request(`/profiles/${owner.profile.id}`, 'GET', undefined, outsider.token)).data.clubs.some(club => club.id === id), false);
     assert.equal((await request(`/clubs/${id}/membership`, 'POST', {}, member.token)).status, 400);
-    assert.equal((await request(`/clubs/${id}/membership`, 'POST', {rulesAccepted: true}, member.token)).data.requested, true);
+    assert.equal((await request(`/clubs/${id}/membership`, 'POST', {rulesAccepted: true, answers: joinAnswers}, member.token)).data.requested, true);
     assert.equal((await request(`/clubs/${id}`, 'GET', undefined, member.token)).data.posts.length, 0);
     assert.equal((await request(`/posts/${post.data.id}`, 'GET', undefined, member.token)).status, 403);
     assert.equal((await request(`/clubs/${id}/members`, 'GET', undefined, member.token)).status, 403);
@@ -79,7 +80,7 @@ test('starter clubs, owner approval, club blocks and account changes', async () 
     assert.equal((await request(`/clubs/${id}/membership`, 'POST', {rulesAccepted: true}, member.token)).status, 403);
     assert.equal((await request(`/clubs/${id}/requests`, 'GET', undefined, outsider.token)).status, 403);
     assert.equal((await request(`/clubs/${id}/blocks/${member.profile.id}`, 'DELETE', undefined, owner.token)).status, 200);
-    assert.equal((await request(`/clubs/${id}/membership`, 'POST', {rulesAccepted: true}, member.token)).data.requested, true);
+    assert.equal((await request(`/clubs/${id}/membership`, 'POST', {rulesAccepted: true, answers: joinAnswers}, member.token)).data.requested, true);
 
     const wrongPassword = await request('/account/email', 'PATCH', {email: 'newowner@example.com', currentPassword: 'wrong-password'}, owner.token);
     assert.equal(wrongPassword.status, 401);

@@ -1,0 +1,14 @@
+/* Profile preferences sit with the filters, without another enclosing card. */
+.event-preferences-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: 2px 0 14px; }
+.event-preferences-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.event-preference-button { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 8px 14px; color: #34343b; background: transparent; border: 1px solid #cdd3dd; border-radius: 999px; font: inherit; font-size: .88rem; font-weight: 600; cursor: pointer; }
+.event-preference-button.active { color: #285d4a; background: #e9f2ed; border-color: #a8c4b4; }
+.event-preference-link { display: inline-flex; align-items: center; min-height: 40px; padding: 0; color: #0067d5; background: none; border: 0; font: inherit; font-size: .85rem; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.event-preferences-bar p { margin: 0; font-size: .82rem; color: #626875; }
+.event-preferences-bar p a { color: #38634e; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.event-preferences-bar :is(button,a):focus-visible { outline: 3px solid #87bfff; outline-offset: 3px; }
+@media (max-width: 760px) {
+  .event-preferences-bar { display: block; margin: 0 0 12px; }
+  .event-preferences-bar p { margin-top: 5px; font-size: .78rem; line-height: 1.5; }
+  .event-preference-button, .event-preference-link { min-height: 44px; }
+}

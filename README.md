@@ -24,7 +24,7 @@ The website uses plain HTML, CSS and JavaScript. Its interface is designed to be
 | Backend API | Cloudflare Worker | Validates requests, manages accounts and runs community features. |
 | Database | Cloudflare D1 | Stores profiles, clubs, discussions, saved events and event interest. |
 | AI event finder | Cloudflare Workers AI with local fallback | Converts a short family conversation into filters without a paid API key. |
-| Authentication | Built-in email and password accounts | Creates secure sessions without Google login or another paid service. |
+| Authentication | Email/password and Google Identity Services | Opens a Family Finds session with either sign-in method. |
 
 The project is designed to use free services only. The UQ Team Zone hosts the frontend, and the backend uses the Cloudflare Workers and D1 Free plans. If a Cloudflare free-plan daily limit is reached, requests fail until the limit resets instead of the project automatically upgrading.
 
@@ -161,10 +161,15 @@ Home links use `index.html` with no `#home` suffix. Inner views use hashes so Ev
 
 ### Week 9 discovery refinements
 
-The event feed starts with family-relevant Council listings. This follows the
-Week 9 feedback that parents should not need to enable a family checkbox before
-they can browse. The Council's age fields and family wording in titles determine
-relevance, so some suitable events with missing age information may be absent.
+Guests and accounts without saved child age groups start with no selected event filters.
+For signed-in parents with saved age groups, Events automatically applies those age
+groups. Parents can choose Show all ages, change the age filter, or restore Use saved
+ages. A manual choice stays in place until the account or saved ages change. Multiple
+child age groups match either range. Listings with unknown age suitability are excluded
+when an age filter is active; families should check the organiser's information.
+The For me option matches the profile's saved interests using the event text. It does
+not call an AI service. Events load in pages of 24, with a limited number of candidate
+pages for filters, rather than loading the entire feed.
 
 Parents can narrow results by child age range, cost, date, suburb or distance,
 category, and activity tag. Tags such as Music, Sport, Nature, and Indoor are
@@ -328,6 +333,43 @@ Configuration:
 - For local Google sign-in, also register `http://localhost` and `http://localhost:3000` (or the actual preview port). Use that registered hostname when opening the preview.
 - Redirect URIs may stay empty for this popup/callback flow.
 - While the Google project is in Testing, configure intended test accounts under Audience. Change the publishing status when ready for public use.
-- Deploy the updated Worker with `npm run deploy:backend` and upload the updated frontend to UQ using the deployment steps above. Existing databases need migrations through `0005`; the newest migration adds private-club requests and blocks and seeds three family starter clubs.
+- Deploy the updated Worker with `npm run deploy:backend` and upload the updated frontend to UQ using the deployment steps above. Existing databases need migrations through `0006`; the newest migration adds personal blocks, reports and private-club questionnaire answers. Apply migrations before deploying the updated Worker.
 
 Run `npm test` with Node 22.13+ to check AI intent validation and fallback matching alongside signed-token validation, account creation, repeat login, email collision handling, password login, origin checks and logout against an in-memory SQLite database. Tests use generated test keys and never real Google credentials. A real Google popup sign-in still needs a user to complete it on a registered origin.
+
+
+## Profile suggestions, club requests and reports
+
+Child age groups are private profile preferences. Edit profile accepts more than one
+age group; All ages clears the automatic age restriction. No child names, exact birth
+dates or additional paid services are needed. Community also includes For me club
+suggestions based on saved interests and suburb.
+
+Private club requests require two short answers and acceptance of the community rules.
+The pending state uses the server timestamp to show when a request was submitted and
+how long it has been waiting. It does not promise an approval deadline. Owners can
+read answers, approve or decline; applicants can cancel and check their status.
+
+Members can report a user with a reason and optional details, and manage their own
+report receipts in Account settings. Club owners review reports scoped to their club.
+Reports about the owner are not sent to that owner for review. Personal blocking hides
+profiles, posts, replies and shared event-interest information in both directions.
+Club-owner blocks separately remove club access.
+
+Global report review is limited to profiles explicitly named in the Worker's optional
+`MODERATOR_PROFILE_IDS` variable (comma-separated profile UUIDs). It has no default
+moderators: configure only trusted existing team accounts. An empty value grants
+nobody review access. Configured moderators see the queue in Account settings. Reports
+are stored even when no moderator is configured; filing a report does not itself
+suspend an account or guarantee a response.
+
+The application includes `frontend/references.html`, with source citations in page
+footers, account pages, community pages and the event finder. Keep the source comments
+alongside third-party integrations. The team must supply the name of the artwork tool
+to complete the logo/icon credit; do not invent an author or download source.
+
+For release, apply `npm run db:remote` before `npm run deploy:backend`, then upload
+all of `frontend/` to the Team Zone web root. `index.html` at the repository root
+redirects to the application if the whole repository is served, preserving shared
+route hashes. The recommended release still copies only `frontend/` into the web root.
+Test the Team Zone URL in a fresh browser and on a phone through the UQ network/VPN.

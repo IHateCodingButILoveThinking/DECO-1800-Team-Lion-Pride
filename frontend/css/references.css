@@ -1,0 +1,18 @@
+/* Source notes use the same type and spacing as the rest of Family Finds. */
+.references-page { max-width: 920px; }
+.references-intro { padding: 28px 0 36px; }
+.references-intro h1 { font-size: clamp(2rem, 5vw, 3rem); }
+.reference-entry { padding: 25px 0; border-top: 1px solid var(--line); scroll-margin-top: 95px; }
+.reference-entry h2 { margin-bottom: 12px; font-size: 1.25rem; }
+.reference-entry p { color: #56565e; max-width: 74ch; }
+.reference-entry a, .source-credit a { color: #0065c9; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.reference-links { display: flex; flex-wrap: wrap; gap: 10px 24px; padding: 0; margin: 12px 0 0; list-style: none; }
+.source-credit { color: #64646c; font-size: .76rem; line-height: 1.5; }
+.site-footer { flex-wrap: wrap; gap: 12px 24px; }
+.site-footer > a { line-height: 1.5; }
+@media (max-width: 760px) {
+  .references-intro { padding: 20px 0 28px; }
+  .reference-entry { scroll-margin-top: 20px; }
+  .reference-links { flex-direction: column; gap: 12px; }
+  .references-page + .site-footer { padding-bottom: 24px; }
+}

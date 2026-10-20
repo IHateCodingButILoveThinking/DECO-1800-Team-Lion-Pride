@@ -1,0 +1,138 @@
+/* Family Finds community controls. Layout and styling by Team Lion Pride. */
+.community-rules-summary{margin:0 0 20px;color:#536355;font-size:.83rem;line-height:1.5}
+.community-source-credit,.auth-card .auth-source-credit{margin:28px 0 0;color:#66676c;font-size:.75rem;line-height:1.5}
+.community-source-credit a,.auth-source-credit a{color:#0067c9;text-decoration:underline;text-underline-offset:2px}
+.club-match-reason{display:block;margin-top:8px;color:#26623e;font-size:.75rem;font-weight:500}
+.person-safety-actions{display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px 14px}
+.person-safety-actions button{border:0;background:none;color:#5d6268;font-size:.78rem;padding:7px 0;min-height:40px;white-space:nowrap}
+.person-safety-actions button:hover{text-decoration:underline;color:#176cc2}
+.profile-card .person-safety-actions{display:flex;border-top:1px solid var(--line);margin-top:18px;gap:22px}
+.profile-card .person-safety-actions button{min-height:44px}
+.post-actions{flex-wrap:wrap}
+.post-actions .person-safety-actions{margin-left:auto;gap:12px}
+.member-safety-controls{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.member-card-person strong{overflow-wrap:anywhere}
+.member-safety-controls .button{margin:0}
+.club-sections{overflow-x:auto;scrollbar-width:thin;gap:24px}
+.club-sections button{white-space:nowrap;flex-shrink:0;min-height:48px}
+.request-clock{display:inline-block;color:#6d654b;font-size:.78rem;font-variant-numeric:tabular-nums}
+.compact-club-meta .request-clock{font-size:inherit}
+.club-join-explainer .request-clock{background:#fff2ce;border-radius:20px;padding:5px 11px;color:#6b5217}
+.join-request-card{padding:20px 0;border-top:1px solid var(--line)}
+.join-request-person{display:flex;flex-wrap:wrap;align-items:center;gap:5px 14px;font-size:.9rem}
+.join-request-person>.request-clock{margin-left:auto}
+.join-request-person>span:not(.request-clock){color:var(--muted);font-size:.8rem}
+.join-request-answers{font-size:.86rem;line-height:1.55;margin:15px 0 18px}
+.join-request-answers dt{margin:12px 0 4px;font-weight:600}
+.join-request-answers dd{margin:0;color:#62656b;white-space:pre-wrap;overflow-wrap:anywhere}
+.moderation-actions{display:flex;flex-wrap:wrap;gap:8px}
+#join-club-form textarea{min-height:86px;border-radius:14px}
+#report-user-form textarea{border-radius:14px}
+.report-review{padding:18px 0;border-top:1px solid var(--line)}
+.report-review>div:first-child{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.report-review>p{font-size:.84rem;color:#62656b;margin:10px 0}
+.report-review .report-details{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+.report-status{display:inline-block;font-size:.72rem;line-height:1.5;border-radius:12px;padding:3px 9px;background:#edf2f8;color:#46586e;text-transform:capitalize}
+.report-receipt{padding:16px 0;border-top:1px solid var(--line);font-size:.86rem}
+.report-receipt>.report-status{margin-left:10px}
+.report-receipt p{font-size:.8rem;color:var(--muted);margin:8px 0}
+.report-receipt small{display:block;color:var(--muted);line-height:1.5}
+.safety-settings h2:not(:first-child){margin-top:28px}
+.safety-settings .moderation-row{font-size:.88rem}
+@media(max-width:760px){
+  .member-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .member-card{align-items:flex-start;flex-direction:column;gap:12px}
+  .member-safety-controls{align-items:flex-start;width:100%;flex-direction:row;flex-wrap:wrap;justify-content:space-between}
+}
+@media(max-width:540px){
+  .community-route .community-navigation .section-tabs{gap:16px;overflow-x:auto;flex:1;scrollbar-width:thin}
+  .community-route .community-navigation .section-tabs button{flex-shrink:0}
+  .community-route .community-navigation{gap:10px}
+  .community-rules-summary{font-size:.77rem;margin-bottom:16px}
+  .post-actions{gap:6px 14px}
+  .post-actions .person-safety-actions{margin-left:0;width:100%;border-top:1px solid var(--line);padding-top:2px}
+  .member-list{grid-template-columns:1fr}
+  .member-card{flex-direction:row;flex-wrap:wrap;align-items:center}
+  .member-safety-controls{width:auto;margin-left:auto}
+  .member-safety-controls .button{min-height:40px}
+  .person-safety-actions button{min-height:44px}
+  .join-request-person>.request-clock{width:100%;margin-left:0}
+  .moderation-actions .button{flex:1;min-height:42px;padding:10px 12px}
+  .club-sections{gap:20px}
+  .report-receipt>.report-status{margin:5px 0 0 8px}
+}
+
+/* Familiar labelled actions, informed by Atlassian button/icon guidance.
+   https://atlassian.design/components/button/usage (see references.html#interaction-design). */
+.person-safety-actions { gap: 8px; }
+.person-safety-actions .safety-button,
+.post-actions .person-safety-actions .safety-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 40px; padding: 8px 12px; border: 1px solid #d9ddd8; border-radius: 10px;
+  background: #fff; color: #42584b; font-size: .79rem; font-weight: 550; line-height: 1.2;
+}
+.person-safety-actions .safety-button:hover { background: #eef3ef; border-color: #a8bcae; text-decoration: none; }
+.person-safety-actions .safety-button-block { color: #93483e; border-color: #e4d7d3; }
+.person-safety-actions .safety-button-block:hover { background: #faf0ed; border-color: #cea89e; color: #823a31; }
+.person-safety-actions .safety-button:focus-visible { outline: 3px solid #3e725b; outline-offset: 3px; }
+.profile-card .person-safety-actions { display: flex; gap: 8px; padding-top: 18px; justify-content: stretch; }
+.profile-card .person-safety-actions .safety-button { flex: 1; width: auto; margin: 0; min-height: 44px; }
+.member-safety-controls { gap: 8px; }
+
+/* A button-controlled disclosure closes through click, Escape or focus leaving it. */
+.header-account { gap: 10px; }
+.header-account .account-settings-link { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: auto; height: 42px; min-height: 42px; padding: 0 12px; border: 1px solid #dce5dc; border-radius: 11px; background: #f3f6f2; color: #365c48; font-size: .8rem; font-weight: 550; }
+.header-account .account-settings-link:hover { background: #e6eee5; }
+.account-control { position: relative; }
+.account-trigger { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 8px 4px 4px; background: transparent; border: 1px solid transparent; border-radius: 999px; }
+.account-trigger:hover,.account-trigger[aria-expanded=true] { background: #edf3ed; border-color: #dce5dc; }
+.account-trigger .account-avatar { width: 34px; height: 34px; background: #e4eee4; color: #2f614b; }
+.account-trigger-name { max-width: 132px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .83rem; font-weight: 600; }
+.account-trigger > svg { color: #637367; transition: transform .15s; }
+.account-trigger[aria-expanded=true] > svg { transform: rotate(180deg); }
+.account-control .account-menu { position: absolute; inset: calc(100% + 10px) 0 auto auto; z-index: 70; width: 276px; max-width: calc(100vw - 32px); padding: 8px; border: 1px solid #e0e5dc; border-radius: 17px; background: #fff; box-shadow: 0 14px 40px #18362624; }
+.account-menu[hidden] { display: none !important; }
+.account-menu-heading { position: relative; padding: 11px 36px 14px 12px; margin-bottom: 5px; border-bottom: 1px solid #edf0e9; }
+.account-menu-heading > span { display: block; font-size: .74rem; color: #727a70; line-height: 1.5; }
+.account-menu-heading .account-menu-name { color: #27372c; font-size: .9rem; font-weight: 650; overflow-wrap: anywhere; }
+.account-menu-close { display: grid; place-items: center; position: absolute; top: 8px; right: 2px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: #647267; }
+.account-menu-close:hover { background: #f0f4ed; }
+.account-control .account-menu > a,.account-control .account-menu > button.account-logout { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 44px; padding: 10px 12px; border: 0; border-radius: 9px; background: none; color: #354639; font: inherit; font-size: .84rem; text-align: left; }
+.account-control .account-menu > a:hover,.account-control .account-menu > button.account-logout:hover { background: #eff4ec; }
+.account-control .account-menu > button.account-logout { border-top: 1px solid #edf0e9; border-radius: 0 0 9px 9px; margin-top: 6px; padding-top: 13px; }
+.site-header:has(.account-trigger[aria-expanded=true]) { z-index: 60; }
+.profile-card { border: 1px solid #e2e6dd; border-radius: 20px; }
+.profile-avatar { background: #e5eee3; color: #39604a; }
+.profile-kicker { display: block; margin: 20px 0 7px; color: #6e7b6c; font-size: .74rem; }
+.profile-card h1 { margin: 0 0 10px; overflow-wrap: anywhere; font-size: 1.8rem; line-height: 1.2; }
+.profile-location { display: flex; align-items: center; gap: 7px; }
+.profile-bio { overflow-wrap: anywhere; }
+.profile-interests { gap: 7px; }
+.profile-edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 22px; }
+.profile-card .profile-edit-actions .button { width: auto; margin: 0; min-height: 42px; border-radius: 11px; }
+.profile-settings-shortcut { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; font-size: .8rem; color: #41664c; }
+.profile-preferences { margin-top: 24px; border-top: 1px solid #e8ece3; padding-top: 19px; }
+.profile-preferences h2 { display: flex; align-items: center; gap: 7px; font-size: .9rem; letter-spacing: -.15px; }
+.profile-preferences p { margin-bottom: 5px; font-size: .82rem; }
+.profile-preferences small { display: block; color: #747c70; font-size: .72rem; line-height: 1.5; }
+.profile-preferences > a { display: inline-flex; align-items: center; gap: 5px; margin-top: 16px; font-size: .8rem; }
+.profile-section-heading { margin: 0 0 20px; }
+.profile-section-heading button { display: inline-flex; align-items: center; gap: 5px; min-height: 42px; }
+@media(max-width:760px) {
+  .header-account > .account-settings-link:first-child { display: inline-flex; }
+  .header-account .account-settings-link { min-height: 40px; height: 40px; padding: 0 9px; gap: 5px; font-size: .74rem; }
+  .account-trigger-name,.account-trigger > svg { display: none; }
+  .account-trigger { padding: 4px; }
+  .header-account { gap: 5px; }
+  .account-control .account-menu { right: 0; }
+  .person-safety-actions .safety-button { min-height: 44px; }
+  .profile-section-heading { flex-wrap: wrap; gap: 7px; }
+}
+@media(prefers-reduced-motion:reduce) { .account-trigger > svg { transition: none; } }
+@media(min-width:761px) and (max-width:1050px) { .account-trigger-name { display: none; } }
+@media(max-width:760px) { .header-inner { gap: 10px; } }
+@media(max-width:380px) {
+  .header-inner { padding-inline: 14px; gap: 8px; }
+  .brand { font-size: .95rem; gap: 7px; }
+  .brand img { width: 30px; height: 30px; }
+}

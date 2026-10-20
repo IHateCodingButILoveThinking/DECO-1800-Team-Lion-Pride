@@ -1,3 +1,5 @@
+// Google ID-token validation: https://developers.google.com/identity/gsi/web/guides/verify-google-id-token
+// JWT verification library: https://github.com/panva/jose
 import {createRemoteJWKSet, jwtVerify} from 'jose';
 
 const googleKeys = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
